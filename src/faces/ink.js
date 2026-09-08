@@ -11,7 +11,7 @@
  * state) so it can be ported to GDScript almost line for line.
  */
 
-import { makeFbm1D, makeRng } from './rng.js';
+import { makeFbm1D, makeRng } from './rng.js?v=df44e11666';
 
 // ---------------------------------------------------------------------------
 // Path construction helpers. A "path" is a flat array of {x, y}.

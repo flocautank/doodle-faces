@@ -15,7 +15,7 @@
  * genome panel live, then paste the numbers you settled on into a `tune`.
  */
 
-import { makeGenome } from './genome.js';
+import { makeGenome } from './genome.js?v=df44e11666';
 
 export const RECIPES = {
   /**

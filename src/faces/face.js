@@ -5,36 +5,36 @@
  * plain Canvas2D context, so the same code works in a web page, in an
  * OffscreenCanvas worker, or piped into any engine that can take a canvas.
  *
- *   import { renderFace } from './src/faces/face.js';
+ *   import { renderFace } from './src/faces/face.js?v=df44e11666';
  *   document.body.append(renderFace('gareth', { size: 256 }));
  *
  * Seeds are stable: the same seed always produces the same face, on every
  * machine, forever. Store the seed, not the pixels.
  */
 
-import { makeAnatomy } from './anatomy.js';
-import { drawGlasses, drawHat, hatRegions, lensRegions } from './accessories.js';
+import { makeAnatomy } from './anatomy.js?v=df44e11666';
+import { drawGlasses, drawHat, hatRegions, lensRegions } from './accessories.js?v=df44e11666';
 import {
   drawBrows, drawEars, drawEyes, drawHorns, drawMarks, drawMouth, drawNose, drawProps,
-} from './features.js';
-import { beardRegions, drawBeard, drawHair, hairRegion } from './hair.js';
-import { drawAccents } from './color.js';
-import { makeInk, openCurve, paintPaper, pt } from './ink.js';
-import { makeGenome, makeGenomes } from './genome.js';
+} from './features.js?v=df44e11666';
+import { beardRegions, drawBeard, drawHair, hairRegion } from './hair.js?v=df44e11666';
+import { drawAccents } from './color.js?v=df44e11666';
+import { makeInk, openCurve, paintPaper, pt } from './ink.js?v=df44e11666';
+import { makeGenome, makeGenomes } from './genome.js?v=df44e11666';
 
-export { makeGenome, makeGenomes } from './genome.js';
+export { makeGenome, makeGenomes } from './genome.js?v=df44e11666';
 export {
   BEARD_STYLES, BROW_STYLES, DEFAULT_WEIGHTS, EAR_STYLES, EYE_STYLES,
   GLASSES_STYLES, HAIR_STYLES, HAT_STYLES, HEAD_SHAPES, MOUTH_STYLES, NOSE_STYLES,
   PEN_NAMES, PEN_STYLES,
-} from './genome.js';
-export { makeRng } from './rng.js';
-export { KIN, KIN_NAMES } from './kin.js';
-export { LOOKS, LOOK_NAMES } from './looks.js';
-export { paintPaper } from './ink.js';
-export { PRESETS } from './presets.js';
-export { makeRecipe, RECIPES, RECIPE_NAMES } from './recipes.js';
-export { breed, brood } from './breed.js';
+} from './genome.js?v=df44e11666';
+export { makeRng } from './rng.js?v=df44e11666';
+export { KIN, KIN_NAMES } from './kin.js?v=df44e11666';
+export { LOOKS, LOOK_NAMES } from './looks.js?v=df44e11666';
+export { paintPaper } from './ink.js?v=df44e11666';
+export { PRESETS } from './presets.js?v=df44e11666';
+export { makeRecipe, RECIPES, RECIPE_NAMES } from './recipes.js?v=df44e11666';
+export { breed, brood } from './breed.js?v=df44e11666';
 
 /** The drawing box. The face itself is 100 units, leaving room for hats. */
 export const BOX = 128;

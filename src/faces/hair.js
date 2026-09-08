@@ -13,7 +13,7 @@
  * plus edge fuzz, which is what stops it looking like a stamped shape.
  */
 
-import { closedCurve, ellipsePath, openCurve, pathBounds, pt, resample } from './ink.js';
+import { closedCurve, ellipsePath, openCurve, pathBounds, pt, resample } from './ink.js?v=df44e11666';
 
 /**
  * Per-style shell parameters.

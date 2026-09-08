@@ -3,7 +3,7 @@
  * in front of it rather than as part of the skull.
  */
 
-import { closedCurve, ellipsePath, openCurve, pt } from './ink.js';
+import { closedCurve, ellipsePath, openCurve, pt } from './ink.js?v=df44e11666';
 
 // ---------------------------------------------------------------------------
 // Glasses

@@ -8,9 +8,9 @@
  * twice.
  */
 
-import { drawFace } from './face.js';
-import { makeGenome } from './genome.js';
-import { hashSeed } from './rng.js';
+import { drawFace } from './face.js?v=df44e11666';
+import { makeGenome } from './genome.js?v=df44e11666';
+import { hashSeed } from './rng.js?v=df44e11666';
 
 /**
  * @param {Array<string|number|object>} faces  seeds or genomes

@@ -26,9 +26,9 @@ import {
   ACCENT_COLORS, BEARD_STYLES, BROW_STYLES, EYE_STYLES, GLASSES_STYLES,
   HAIR_STYLES, HAT_STYLES, HEAD_METRICS, HEAD_SHAPES, MOUTH_STYLES, NOSE_STYLES,
   makeGenome,
-} from './genome.js';
-import { resolveKin } from './kin.js';
-import { makeRng } from './rng.js';
+} from './genome.js?v=df44e11666';
+import { resolveKin } from './kin.js?v=df44e11666';
+import { makeRng } from './rng.js?v=df44e11666';
 
 /** What a typical front-on portrait measures, in the units photo.js reports. */
 const PHOTO = {

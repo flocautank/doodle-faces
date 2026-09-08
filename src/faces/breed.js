@@ -10,7 +10,7 @@
  * parents and different child seeds.
  */
 
-import { makeRng } from './rng.js';
+import { makeRng } from './rng.js?v=df44e11666';
 
 /**
  * Fields that must be taken whole from one parent. Everything else that is a

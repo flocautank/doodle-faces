@@ -15,14 +15,14 @@ import {
   BEARD_STYLES, BROW_STYLES, EAR_STYLES, EYE_STYLES, GLASSES_STYLES, HAIR_STYLES,
   HAT_STYLES, HEAD_SHAPES, MOUTH_STYLES, NOSE_STYLES,
   KIN, KIN_NAMES, LOOKS, LOOK_NAMES, PEN_NAMES, PEN_STYLES,
-} from './src/faces/genome.js';
-import { drawFace, faceToDataURL, makeGenome, renderFace, renderSheet } from './src/faces/face.js';
-import { PRESETS, PRESET_NAMES } from './src/faces/presets.js';
-import { atlasSeeds, buildAtlas } from './src/faces/atlas.js';
-import { makeRng } from './src/faces/rng.js';
-import { breed } from './src/faces/breed.js';
-import { measureFace } from './src/faces/photo.js';
-import { fitGenome } from './src/faces/fit.js';
+} from './src/faces/genome.js?v=df44e11666';
+import { drawFace, faceToDataURL, makeGenome, renderFace, renderSheet } from './src/faces/face.js?v=df44e11666';
+import { PRESETS, PRESET_NAMES } from './src/faces/presets.js?v=df44e11666';
+import { atlasSeeds, buildAtlas } from './src/faces/atlas.js?v=df44e11666';
+import { makeRng } from './src/faces/rng.js?v=df44e11666';
+import { breed } from './src/faces/breed.js?v=df44e11666';
+import { measureFace } from './src/faces/photo.js?v=df44e11666';
+import { fitGenome } from './src/faces/fit.js?v=df44e11666';
 
 const $ = (id) => document.getElementById(id);
 const labelOf = (table, key) => (table[key] && table[key].label) || key;

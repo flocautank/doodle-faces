@@ -744,7 +744,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
 
 <script>
 (() => {
-  // src/faces/rng.js
+  // src/faces/rng.js?v=df44e11666
   function hashSeed(seed) {
     if (typeof seed == "number" && Number.isFinite(seed))
       return seed >>> 0 || 2654435769;
@@ -814,7 +814,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     };
   }
 
-  // src/faces/kin.js
+  // src/faces/kin.js?v=df44e11666
   var KIN_NAMES = [
     "human",
     "child",
@@ -1027,7 +1027,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     };
   }
 
-  // src/faces/looks.js
+  // src/faces/looks.js?v=df44e11666
   var LOOK_NAMES = [
     "plain",
     "finance",
@@ -1290,7 +1290,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     beast: ["finance", "bobo", "scholar", "noble", "detective"]
   };
 
-  // src/faces/genome.js
+  // src/faces/genome.js?v=df44e11666
   var HEAD_SHAPES = [
     "round",
     "oval",
@@ -1858,7 +1858,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     brick: { w: 33, h: 40, jaw: 1.1, brow: 1.12, exp: 3.6 }
   };
 
-  // src/faces/ink.js
+  // src/faces/ink.js?v=df44e11666
   function pt(x, y) {
     return { x, y };
   }
@@ -2215,7 +2215,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     ctx.restore();
   }
 
-  // src/faces/anatomy.js
+  // src/faces/anatomy.js?v=df44e11666
   function curveAt(points, t) {
     for (let i = 0; i < points.length - 1; i++) {
       let [t0, v0] = points[i], [t1, v1] = points[i + 1];
@@ -2315,7 +2315,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     };
   }
 
-  // src/faces/accessories.js
+  // src/faces/accessories.js?v=df44e11666
   function lensRegions(an, g) {
     let gl = g.glasses;
     if (gl.style === "none") return [];
@@ -2747,7 +2747,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     return [p.x, p.y];
   }
 
-  // src/faces/features.js
+  // src/faces/features.js?v=df44e11666
   function withTilt(an, x, y) {
     let p = an.tiltPoint(pt(x, y));
     return [p.x, p.y];
@@ -3673,7 +3673,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     ink.stroke(an.tiltPath(smoke), { width: 0.5, passes: 1, wobble: 1.1, alpha: 0.35 });
   }
 
-  // src/faces/hair.js
+  // src/faces/hair.js?v=df44e11666
   var HAIR_PARAMS = {
     buzz: { puffX: 0.01, puffY: 0.04, hairT: 0.28, sideT: 0.3, hairline: "straight", render: "stipple" },
     shortHatch: { puffX: 0.03, puffY: 0.1, hairT: 0.26, sideT: 0.32, hairline: "wavy", render: "flow", len: 5 },
@@ -4257,7 +4257,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     return [...right, ...left.reverse()];
   }
 
-  // src/faces/color.js
+  // src/faces/color.js?v=df44e11666
   function drawAccents(ink, an, g, regions = {}) {
     let accents = g.accents || [];
     if (accents.length !== 0)
@@ -4343,7 +4343,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     });
   }
 
-  // src/faces/presets.js
+  // src/faces/presets.js?v=df44e11666
   var PRESETS = {
     /** The reference look: a notebook margin, mostly humans, the odd oddity. */
     notebook: {
@@ -4414,7 +4414,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     }
   }, PRESET_NAMES = Object.keys(PRESETS);
 
-  // src/faces/recipes.js
+  // src/faces/recipes.js?v=df44e11666
   var RECIPES = {
     /**
      * The knitted-beanie-and-black-shades portrait: hatched wool with a nub on
@@ -4446,7 +4446,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     }
   }, RECIPE_NAMES = Object.keys(RECIPES);
 
-  // src/faces/breed.js
+  // src/faces/breed.js?v=df44e11666
   var DISCRETE = /* @__PURE__ */ new Set([
     "kin",
     "look",
@@ -4491,7 +4491,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     return v;
   }
 
-  // src/faces/face.js
+  // src/faces/face.js?v=df44e11666
   var BOX = 128;
   function drawFace(ctx, face, opts2 = {}) {
     let g = typeof face == "object" && face !== null && face.head ? face : makeGenome(face, opts2), size = opts2.size ?? Math.min(ctx.canvas.width, ctx.canvas.height), ox = opts2.x ?? 0, oy = opts2.y ?? 0;
@@ -4580,7 +4580,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     }), canvas;
   }
 
-  // src/faces/atlas.js
+  // src/faces/atlas.js?v=df44e11666
   function buildAtlas(faces, opts2 = {}) {
     let cell = opts2.cell ?? 192, cols = opts2.cols ?? Math.ceil(Math.sqrt(faces.length)), rows = Math.ceil(faces.length / cols), canvas = document.createElement("canvas");
     canvas.width = cols * cell, canvas.height = rows * cell;
@@ -4629,7 +4629,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     return Array.from({ length: count }, (_, i) => `${rootSeed}#${i}`);
   }
 
-  // src/faces/photo.js
+  // src/faces/photo.js?v=df44e11666
   function luma(d, i) {
     return 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
   }
@@ -5087,7 +5087,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     };
   }
 
-  // src/faces/fit.js
+  // src/faces/fit.js?v=df44e11666
   var PHOTO = {
     aspect: 0.66,
     // cheek width / (crown → chin)
