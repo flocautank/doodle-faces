@@ -42,8 +42,16 @@ git push origin main
 gh api repos/flocautank/doodle-faces/pages/builds/latest --jq .status   # built ?
 ```
 
-GitHub Pages met les fichiers en cache une dizaine de minutes ; un visiteur déjà
-venu peut donc voir l'ancienne CSS un moment après un déploiement.
+GitHub Pages met les fichiers en cache une dizaine de minutes. Pour qu'un
+visiteur déjà venu ne se retrouve pas avec l'ancienne CSS,
+`tools/stamp-assets.mjs` colle une empreinte du contenu sur les liens de
+`index.html` — chaque déploiement produit donc une URL neuve, et il n'y a plus
+rien de périmé à servir. C'est lancé par `npm run build`, à faire avant de
+pousser :
+
+```bash
+npm run build && git commit -am "…" && git push origin main
+```
 
 ### Ailleurs
 

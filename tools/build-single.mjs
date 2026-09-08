@@ -33,16 +33,11 @@ const bundle = execFileSync(
 const html = await read('index.html');
 const css = await read('style.css');
 
-// The page is authored with two external references; swap both for their content.
+// The page has two external references; swap both for their content. The
+// patterns tolerate the `?v=hash` that stamp-assets.mjs adds for cache busting.
 const inlined = html
-  .replace(
-    '<link rel="stylesheet" href="style.css">',
-    `<style>\n${css}\n</style>`,
-  )
-  .replace(
-    '<script type="module" src="app.js"></script>',
-    `<script>\n${bundle}\n</script>`,
-  );
+  .replace(/<link rel="stylesheet" href="style\.css[^"]*">/, `<style>\n${css}\n</style>`)
+  .replace(/<script type="module" src="app\.js[^"]*"><\/script>/, `<script>\n${bundle}\n</script>`);
 
 if (inlined === html) throw new Error('nothing was inlined — did index.html change?');
 

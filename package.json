@@ -7,8 +7,9 @@
   "scripts": {
     "dev": "npx --yes http-server . -p 5180 -c-1",
     "check": "node --check src/faces/rng.js && node --check src/faces/ink.js && node --check src/faces/genome.js && node --check src/faces/anatomy.js && node --check src/faces/features.js && node --check src/faces/hair.js && node --check src/faces/accessories.js && node --check src/faces/color.js && node --check src/faces/face.js && node --check src/faces/atlas.js && node --check src/faces/presets.js && node --check src/faces/recipes.js && node --check src/faces/breed.js && node --check src/faces/kin.js && node --check src/faces/looks.js && node --check app.js",
-    "build": "node tools/build-single.mjs",
-    "deploy": "git push origin main"
+    "build": "node tools/stamp-assets.mjs && node tools/build-single.mjs",
+    "deploy": "git push origin main",
+    "stamp": "node tools/stamp-assets.mjs"
   },
   "homepage": "https://flocautank.github.io/doodle-faces/"
 }
