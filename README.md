@@ -43,15 +43,29 @@ gh api repos/flocautank/doodle-faces/pages/builds/latest --jq .status   # built 
 ```
 
 GitHub Pages met les fichiers en cache une dizaine de minutes. Pour qu'un
-visiteur déjà venu ne se retrouve pas avec l'ancienne CSS,
-`tools/stamp-assets.mjs` colle une empreinte du contenu sur les liens de
-`index.html` — chaque déploiement produit donc une URL neuve, et il n'y a plus
-rien de périmé à servir. C'est lancé par `npm run build`, à faire avant de
-pousser :
+visiteur déjà venu ne se retrouve pas avec d'anciens fichiers,
+`tools/stamp-assets.mjs` colle une empreinte du contenu sur **toutes** les URL
+que la page charge : la CSS, `app.js`, et chaque import relatif du graphe de
+modules. Chaque déploiement produit donc des URL neuves, et il n'y a plus rien
+de périmé à servir. C'est lancé par `npm run build`, à faire avant de pousser :
 
 ```bash
 npm run build && git commit -am "…" && git push origin main
 ```
+
+Tamponner le graphe de modules n'est pas cosmétique. `app.js` portait une
+empreinte et pas les modules qu'il importe : un visiteur venu dix minutes avant
+un déploiement pouvait donc exécuter un `app.js` neuf contre d'anciens modules.
+Ce n'est pas un style périmé, c'est un programme incohérent — et c'est
+invisible, puisque tout se charge. Ça m'a coûté une fausse piste pendant la
+vérification : le site en ligne rendait un visage différent du local pour un cas
+que je venais de corriger, alors que l'origine servait démonstrablement le bon
+fichier ; c'est l'onglet qui gardait d'anciens modules derrière un point
+d'entrée neuf.
+
+Une seule empreinte pour tout l'arbre, plutôt qu'une par fichier : l'arbre part
+ensemble de toute façon, et des empreintes par fichier obligeraient à réécrire
+le graphe de bas en haut à chaque build sans rien gagner.
 
 ### Ailleurs
 
