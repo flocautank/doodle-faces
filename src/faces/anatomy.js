@@ -7,8 +7,8 @@
  * same head *turn* for free.
  */
 
-import { pt } from './ink.js?v=df44e11666';
-import { makeFbm1D, makeRng } from './rng.js?v=df44e11666';
+import { pt } from './ink.js?v=e1ff722724';
+import { makeFbm1D, makeRng } from './rng.js?v=e1ff722724';
 
 /** Smooth piecewise interpolation through (t, value) control points. */
 function curveAt(points, t) {

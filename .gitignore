@@ -1,2 +1,6 @@
 node_modules/
 .DS_Store
+
+# Personal photos used to check the fit. Never committed: they are the
+# user's own face, and this repository is public.
+.corpus/

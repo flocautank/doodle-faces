@@ -1141,9 +1141,18 @@ export function measureFace(img) {
 
   return {
     ok: true,
+    source: 'pixels',
     confidence,
     notes,
     image: { w, h },
+
+    // This measurer's own norms, so recalibrating the landmark one cannot
+    // quietly bias this one. See `PHOTO` in fit.js.
+    norms: {
+      aspect: 0.66, jaw: 0.72, brow: 0.88, fill: 0.78,
+      eyeSpacing: 0.44, eyeWidth: 0.2, aperture: 0.34,
+      noseWidth: 0.25, mouthWidth: 0.36,
+    },
 
     head: { crownY, chinY: chin, hairlineY: hairline, cx, faceW, headH },
     ratios: {

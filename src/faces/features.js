@@ -9,7 +9,7 @@
  * from three-quarters).
  */
 
-import { closedCurve, ellipsePath, openCurve, pt } from './ink.js?v=df44e11666';
+import { closedCurve, ellipsePath, openCurve, pt } from './ink.js?v=e1ff722724';
 
 function withTilt(an, x, y) {
   const p = an.tiltPoint(pt(x, y));

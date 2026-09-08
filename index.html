@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Doodle Faces — procedural hand-drawn portraits</title>
 <meta name="description" content="Procedural generator of hand-drawn ink faces. Deterministic, dependency-free, reusable in a game.">
-<link rel="stylesheet" href="style.css?v=93072f035d">
+<link rel="stylesheet" href="style.css?v=c8caeb1f55">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='25' font-size='26'>🙂</text></svg>">
 </head>
 <body>
@@ -53,11 +53,12 @@
           can. It stays a doodle: it is a likeness, not a portrait.
         </p>
         <p class="note keep">
-          <b>The photo never leaves this tab.</b> There is nothing to upload it
-          to — this is a static site, and the measuring runs in your browser.
-          Nothing is written to disk, nothing is kept between visits, and
-          <b>Forget</b> or a reload drops it. The share link carries the
-          resulting numbers, never the picture.
+          <b>The photo never leaves this tab.</b> This is a static site with no
+          server behind it; the face detector is fetched <i>to</i> your browser
+          (about 6&nbsp;MB, once, on first use) and the measuring happens here.
+          Nothing is uploaded, nothing is written to disk, nothing is kept
+          between visits, and <b>Forget</b> or a reload drops it. The share link
+          carries the resulting numbers, never the picture.
         </p>
         <div id="drop" class="drop-zone">
           <input id="photoFile" type="file" accept="image/*" hidden>
@@ -261,6 +262,6 @@
 
 </div>
 
-<script type="module" src="app.js?v=df44e11666"></script>
+<script type="module" src="app.js?v=e1ff722724"></script>
 </body>
 </html>

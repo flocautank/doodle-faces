@@ -369,6 +369,9 @@ body[data-mode="compare"] .sheet-only { display: none !important; }
   color: var(--ink-soft);
 }
 
+/* The same line carries errors and progress; a note is not a failure. */
+.err.is-note { color: var(--ink-soft); }
+
 .photo-preview {
   margin: 8px 0;
   line-height: 0;

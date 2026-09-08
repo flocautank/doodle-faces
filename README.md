@@ -139,23 +139,66 @@ Panneau **From a photo** : on dépose un portrait, le générateur le mesure et
 dessine le visage le plus proche qu'il sache faire. C'est une ressemblance, pas
 un portrait — le trait reste un doodle.
 
-**La photo ne sort pas de l'onglet.** Ce n'est pas une politique, c'est une
-propriété du code : le site est statique, il n'y a aucun serveur vers qui
-l'envoyer, et la mesure tourne en JavaScript dans la page. Rien n'est écrit sur
-disque, rien n'est conservé d'une visite à l'autre, et **Forget** ou un simple
-rechargement libère tout. Le lien de partage transporte les *nombres* obtenus,
-jamais l'image. Aucune dépendance, aucune requête réseau — pas même le
-téléchargement d'un modèle.
+**La photo ne sort pas de l'onglet.** Le site est statique, il n'y a aucun
+serveur vers qui l'envoyer. Le détecteur de visage est téléchargé *vers* ton
+navigateur (~6 Mo, une seule fois, au premier usage) et toute la mesure se fait
+sur place. Rien n'est téléversé, rien n'est écrit sur disque, rien n'est conservé
+d'une visite à l'autre, et **Forget** ou un rechargement libère tout. Le lien de
+partage transporte les *nombres* obtenus, jamais l'image.
 
-J'ai écarté un maillage de repères (MediaPipe, ~4 Mo depuis un CDN, 478 points).
-Dans un doodle de quinze traits, la ressemblance tient à une poignée de rapports
-grossiers, et la précision sous-pixel serait jetée au moment de quantifier en
-« crâne carré ou en poire ». Le traitement d'image ordinaire suffit, et il rend
-la promesse de confidentialité vérifiable plutôt que déclarative.
+### Ce que ça m'a coûté d'apprendre
 
-#### Ce qui est mesuré
+La première version se passait de tout modèle : segmentation du visage par la
+couleur de peau, puis projections de lignes sombres pour trouver les yeux et la
+bouche. L'argument était qu'un doodle de quinze traits tient à une poignée de
+rapports grossiers, et que la précision sous-pixel d'un maillage serait jetée au
+moment de quantifier en « crâne carré ou en poire ».
 
-`src/faces/photo.js` travaille sur un tampon RGBA de 320 px — ni canvas, ni DOM,
+L'argument était juste et il répondait à la mauvaise question. **Ce n'est jamais
+la précision qui échouait, c'est la détection.** Un corpus de dix-neuf vraies
+photos — un café, un bar, une forêt enneigée, une main posée sur la mâchoire, des
+gens en arrière-plan — a donné ceci :
+
+| | avant | après |
+|---|---|---|
+| lunettes détectées (aucune sur les photos) | 68 % | **5 %** |
+| yeux lus comme des soucoupes | 84 % | 0 % |
+| écart des yeux hors plage plausible | 53 % | 0 % |
+| largeur de bouche effondrée | 53 % | 0 % |
+| barbe ratée | 68 % | 11 % |
+| lacet saturé à la butée | 63 % | 16 % |
+| confiance médiane | 0,57 | 0,70 |
+
+Sur plusieurs photos, la « largeur du visage » valait 240 à 291 px dans une image
+de 320 : le masque de peau avalait le cou, les bras, le bois du bar, le mur
+beige. Les tests synthétiques validaient la plomberie, pas la perception — un
+dessin plat sur fond uni ne ressemble à aucune photographie.
+
+D'où le détecteur. Il ne remplace pas mes mesures : il leur donne un point
+d'ancrage, et rend géométrique ce qui était deviné.
+
+### Deux mesureurs, un seul contrat
+
+`measure.js` (repères) et `photo.js` (pixels) produisent **exactement le même
+objet**, si bien que `fit.js` ignore lequel il a reçu. Le second reste le repli
+quand le modèle ne peut pas être téléchargé : une moins bonne réponse vaut mieux
+que pas de réponse.
+
+Chaque mesureur porte ses **propres normes**. Un ovale tracé sur des repères
+n'est pas la même forme qu'une tache de couleur : « largeur du visage » n'y
+désigne pas la même chose, et une base commune biaiserait silencieusement tous
+les visages de l'écart entre les deux définitions.
+
+Ces normes sont lues sur le corpus — une personne, plus un second visage
+incident. Assez pour séparer un décalage de définition d'un trait personnel
+*lorsque les deux sujets concordent*, pas assez pour faire une population.
+Quand ils divergeaient, j'ai gardé la valeur anthropométrique publiée : le sujet
+principal mesure 0,50 d'écart oculaire contre 0,45 pour l'autre visage, donc
+0,45 reste la norme et il est dessiné, à juste titre, un peu écarté des yeux.
+
+#### Ce que mesure le repli (sans modèle)
+
+`src/faces/photo.js` travaille sur un tampon RGBA — ni canvas, ni DOM,
 donc testable hors navigateur. Un masque de peau en chrominance Cb/Cr (une boîte
 étroite et remarquablement indépendante de la carnation) donne la silhouette ;
 son profil de largeur ligne par ligne est *le même objet* que la courbe de
@@ -226,6 +269,33 @@ Le bouton **Another take** rejoue l'ajustement avec une autre graine : la même
 personne, un autre dessin — barbe pleine ou barbe longue, lunettes rondes ou
 carrées — et non quelqu'un d'autre.
 
+#### Ce que les repères apportent
+
+`src/faces/measure.js` garde toute la démarche et remplace les devinettes :
+
+- **silhouette** — l'ovale du visage, au lieu d'une tache de couleur qui avalait
+  le cou et le comptoir derrière ;
+- **ouverture des yeux** — l'écartement réel des paupières, au lieu d'une plage
+  sombre qui fusionnait sourcil, orbite et cils et saturait à « soucoupe » ;
+- **bouche** — le contour des lèvres, au lieu d'une course de rougeur qui
+  s'effondrait sur la moitié du corpus ;
+- **expression** — la *blendshape* que produit un sourire, au lieu de suivre la
+  rangée la plus sombre le long d'une lèvre ;
+- **lacet** — la matrice de pose. Mon estimation géométrique donnait la bonne
+  direction (14 sur 14) mais pas l'amplitude : elle butait sur sa limite sur
+  douze photos, si bien qu'une tête tournée de cinq degrés était dessinée comme
+  une tête tournée de trente.
+
+Cheveux, barbe, lunettes et carnation restent lus sur les pixels — aucun repère
+ne sait de quelle couleur sont les cheveux de quelqu'un — mais échantillonnés là
+où il faut plutôt que là où une projection le supposait.
+
+Le détecteur de lunettes méritait une refonte à lui seul. Il mesurait jusqu'où
+l'obscurité s'étend en travers de la bande des yeux, ce qu'une paire de sourcils
+satisfait sans effort. Une monture se distingue par où elle va que le visage n'a
+rien : **en travers de l'arête du nez, et en arrière sur la tempe vers
+l'oreille**. Les deux tests doivent passer, et c'est le plus faible qui décide.
+
 #### Est-ce que ça marche ?
 
 On ne teste pas « ça me ressemble », mais on peut tester la chaîne qui le
@@ -236,7 +306,7 @@ connues par construction, et `npm test` vérifie qu'elles ressortent.
 npm test
 ```
 
-Cinquante-cinq vérifications : géométrie retrouvée, proportions qui bougent dans
+Cinquante-cinq vérifications sur le chemin de repli : géométrie retrouvée, proportions qui bougent dans
 le bon sens, expression lue juste, barbe et lunettes détectées, plus les
 régressions ci-dessus explicitement verrouillées. Un visage synthétique est
 beaucoup plus facile qu'un vrai : réussir ici est un plancher, pas un plafond.
@@ -302,8 +372,10 @@ src/faces/
   presets.js      les populations : carnet, humains, foule, enfants, joueurs, taverne, carnaval
   recipes.js      les portraits épinglés : un personnage précis, pas une population
   breed.js        croisement de deux génomes : des frères et sœurs, une famille
-  photo.js        mesurer un visage sur une photo (aucun DOM, aucun réseau)
-  fit.js          transformer cette mesure en génome
+  landmarks.js    trouver le visage (le seul module à dépendance, chargé en différé)
+  measure.js      mesurer à partir des repères
+  photo.js        mesurer sans modèle — le repli, aucun DOM, aucun réseau
+  fit.js          transformer l'une ou l'autre mesure en génome
 tools/
   build-single.mjs  tout aplatir en un fichier HTML autonome
   synth-face.mjs    un portrait synthétique aux proportions connues

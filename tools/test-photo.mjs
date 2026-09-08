@@ -8,6 +8,13 @@
  * real ones, so passing here is a floor, not a ceiling — but a regression that
  * breaks the chain shows up immediately.
  *
+ * These exercise `photo.js`, which since the landmark detector arrived is the
+ * *fallback* measurer — the one used when the model cannot be fetched. It is
+ * still worth guarding, and the suite is still the fastest way to catch a
+ * regression, but note what a corpus of real photographs showed: passing every
+ * check here says the plumbing works, not that a face was found. A flat drawing
+ * on a plain ground looks nothing like a photograph taken in a café.
+ *
  *   node tools/test-photo.mjs
  */
 

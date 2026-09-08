@@ -15,14 +15,16 @@ import {
   BEARD_STYLES, BROW_STYLES, EAR_STYLES, EYE_STYLES, GLASSES_STYLES, HAIR_STYLES,
   HAT_STYLES, HEAD_SHAPES, MOUTH_STYLES, NOSE_STYLES,
   KIN, KIN_NAMES, LOOKS, LOOK_NAMES, PEN_NAMES, PEN_STYLES,
-} from './src/faces/genome.js?v=df44e11666';
-import { drawFace, faceToDataURL, makeGenome, renderFace, renderSheet } from './src/faces/face.js?v=df44e11666';
-import { PRESETS, PRESET_NAMES } from './src/faces/presets.js?v=df44e11666';
-import { atlasSeeds, buildAtlas } from './src/faces/atlas.js?v=df44e11666';
-import { makeRng } from './src/faces/rng.js?v=df44e11666';
-import { breed } from './src/faces/breed.js?v=df44e11666';
-import { measureFace } from './src/faces/photo.js?v=df44e11666';
-import { fitGenome } from './src/faces/fit.js?v=df44e11666';
+} from './src/faces/genome.js?v=e1ff722724';
+import { drawFace, faceToDataURL, makeGenome, renderFace, renderSheet } from './src/faces/face.js?v=e1ff722724';
+import { PRESETS, PRESET_NAMES } from './src/faces/presets.js?v=e1ff722724';
+import { atlasSeeds, buildAtlas } from './src/faces/atlas.js?v=e1ff722724';
+import { makeRng } from './src/faces/rng.js?v=e1ff722724';
+import { breed } from './src/faces/breed.js?v=e1ff722724';
+import { measureFace } from './src/faces/photo.js?v=e1ff722724';
+import { fitGenome } from './src/faces/fit.js?v=e1ff722724';
+import { DOWNLOAD_MB, detectFace, isLoaded } from './src/faces/landmarks.js?v=e1ff722724';
+import { measureFromLandmarks } from './src/faces/measure.js?v=e1ff722724';
 
 const $ = (id) => document.getElementById(id);
 const labelOf = (table, key) => (table[key] && table[key].label) || key;
@@ -718,14 +720,27 @@ $('focusB').addEventListener('click', () => {
 // of numbers; both are dropped by Forget.
 // ---------------------------------------------------------------------------
 
-/** Proportions is all the fit needs; detail beyond this is only slower. */
-const PHOTO_MAX = 320;
+/**
+ * Working size for the photo.
+ *
+ * Larger than the fit strictly needs, because the detector likes the extra
+ * pixels and the hair and beard sampling reads better on them. Still small
+ * enough that the whole pass is a few tens of milliseconds.
+ */
+const PHOTO_MAX = 512;
 
 let measured = null;   // the measurement: numbers, no pixels
 let photoSmall = null; // the downscaled working copy, for the overlay
 let photoTake = 0;
 
+function photoNote(msg) {
+  $('photoError').textContent = msg;
+  $('photoError').hidden = false;
+  $('photoError').classList.add('is-note');
+}
+
 function photoFail(msg) {
+  $('photoError').classList.remove('is-note');
   $('photoError').textContent = msg;
   $('photoError').hidden = false;
   $('photoResult').hidden = true;
@@ -734,6 +749,7 @@ function photoFail(msg) {
 /** Decode, downscale, measure. The full-size image is never kept. */
 async function loadPhoto(file) {
   $('photoError').hidden = true;
+  $('photoError').classList.remove('is-note');
   if (!file || !file.type.startsWith('image/')) return photoFail('That is not an image file.');
 
   let bitmap;
@@ -759,14 +775,36 @@ async function loadPhoto(file) {
   sctx.drawImage(bitmap, 0, 0, cw, ch);
   bitmap.close?.();
 
-  let m;
+  const pixels = sctx.getImageData(0, 0, cw, ch);
+
+  /**
+   * Landmarks first, pixels as the fallback.
+   *
+   * The pixel measurer finds a face beautifully on a flat drawing and falls
+   * apart on photographs — it claimed spectacles on two thirds of a real
+   * corpus. So the detector does the finding whenever it can be fetched, and
+   * the old path stays for offline, blocked, or an ancient browser: a worse
+   * answer beats no answer.
+   */
+  let m = null;
   try {
-    m = measureFace(sctx.getImageData(0, 0, cw, ch));
-  } catch (err) {
-    return photoFail(`The measurement failed: ${err.message}`);
+    if (!isLoaded()) photoNote(`Fetching the face detector — about ${DOWNLOAD_MB} MB, once.`);
+    const face = await detectFace(small);
+    if (face) m = measureFromLandmarks(pixels, face);
+  } catch {
+    /* fall through to the pixel measurer */
+  }
+  if (!m) {
+    try {
+      m = measureFace(pixels);
+    } catch (err) {
+      return photoFail(`The measurement failed: ${err.message}`);
+    }
   }
   if (!m.ok) return photoFail(m.reason);
 
+  $('photoError').hidden = true;
+  $('photoError').classList.remove('is-note');
   measured = m;
   photoSmall = small;
   photoTake = 0;
@@ -799,24 +837,44 @@ function drawPhotoOverlay() {
   const S = (v) => v * scale;
   c.lineWidth = 1;
   c.strokeStyle = 'rgba(176,94,72,.9)';
-  c.setLineDash([3, 3]);
-  c.strokeRect(
-    S(m.head.cx - m.head.faceW / 2), S(m.head.crownY),
-    S(m.head.faceW), S(m.head.chinY - m.head.crownY),
-  );
-  c.setLineDash([]);
-  c.strokeStyle = 'rgba(52,124,113,.95)';
-  for (const y of [m.eyes.y, m.mouth.y]) {
+
+  if (m.ovalRaw) {
+    // The outline the detector actually traced. Drawn unrotated, so it sits on
+    // the face however the head is tilted.
     c.beginPath();
-    c.moveTo(S(m.head.cx - m.head.faceW * 0.5), S(y));
-    c.lineTo(S(m.head.cx + m.head.faceW * 0.5), S(y));
+    m.ovalRaw.forEach((p, i) => (i ? c.lineTo(S(p.x), S(p.y)) : c.moveTo(S(p.x), S(p.y))));
+    c.closePath();
     c.stroke();
-  }
-  c.fillStyle = 'rgba(52,124,113,.95)';
-  for (const x of m.eyes.x) {
+    c.fillStyle = 'rgba(52,124,113,.95)';
+    for (const p of m.eyesRaw) {
+      c.beginPath();
+      c.arc(S(p.x), S(p.y), 2.5, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.fillStyle = 'rgba(120,110,180,.95)';
     c.beginPath();
-    c.arc(S(x), S(m.eyes.y), Math.max(1.5, S(m.head.faceW * 0.02)), 0, Math.PI * 2);
+    c.arc(S(m.mouthRaw.x), S(m.mouthRaw.y), 2.5, 0, Math.PI * 2);
     c.fill();
+  } else {
+    c.setLineDash([3, 3]);
+    c.strokeRect(
+      S(m.head.cx - m.head.faceW / 2), S(m.head.crownY),
+      S(m.head.faceW), S(m.head.chinY - m.head.crownY),
+    );
+    c.setLineDash([]);
+    c.strokeStyle = 'rgba(52,124,113,.95)';
+    for (const y of [m.eyes.y, m.mouth.y]) {
+      c.beginPath();
+      c.moveTo(S(m.head.cx - m.head.faceW * 0.5), S(y));
+      c.lineTo(S(m.head.cx + m.head.faceW * 0.5), S(y));
+      c.stroke();
+    }
+    c.fillStyle = 'rgba(52,124,113,.95)';
+    for (const x of m.eyes.x) {
+      c.beginPath();
+      c.arc(S(x), S(m.eyes.y), Math.max(1.5, S(m.head.faceW * 0.02)), 0, Math.PI * 2);
+      c.fill();
+    }
   }
   $('photoPreview').replaceChildren(view);
 }
@@ -824,12 +882,22 @@ function drawPhotoOverlay() {
 /** Say in words what the measurement came to, so it can be argued with. */
 function describeMeasurement(m) {
   const pct = Math.round(m.confidence * 100);
+  const norms = m.norms || {};
+  /** A measurement over what this measurer calls ordinary. */
+  const ratio = (key, value) => {
+    const norm = norms[key];
+    const got = value === undefined ? m.ratios[key] : value;
+    return norm ? got / norm : 1;
+  };
   const bits = [
+    m.source === 'landmarks' ? 'detector' : 'estimated from colour only',
     `confidence ${pct}%`,
-    // 0.66 is what an ordinary portrait measures; the number alone means
-    // nothing to anyone, so say which side of ordinary it falls on.
-    m.ratios.aspect > 0.72 ? 'broad head' : m.ratios.aspect < 0.6 ? 'narrow head' : 'ordinary head',
-    `eyes ${m.eyes.spacing > 0.47 ? 'wide-set' : m.eyes.spacing < 0.41 ? 'close-set' : 'evenly set'}`,
+    // Against the measurer's own norm, not a fixed number: the two measurers
+    // define "face width" differently, and hard-coded cut points meant a face
+    // measured as slightly broader than average was described as narrow.
+    ratio('aspect') > 1.09 ? 'broad head' : ratio('aspect') < 0.92 ? 'narrow head' : 'ordinary head',
+    `eyes ${ratio('eyeSpacing', m.eyes.spacing) > 1.07 ? 'wide-set'
+      : ratio('eyeSpacing', m.eyes.spacing) < 0.93 ? 'close-set' : 'evenly set'}`,
     m.eyes.aperture < 0.2 ? 'narrow' : m.eyes.aperture > 0.5 ? 'wide open' : 'half open',
     m.brows.strength > 1 ? 'heavy brows' : m.brows.strength < 0.3 ? 'faint brows' : 'ordinary brows',
     m.beard.amount > 0.58 ? 'beard' : m.beard.amount > 0.3 ? 'stubble' : 'clean-shaven',

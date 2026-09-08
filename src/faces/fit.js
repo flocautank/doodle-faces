@@ -26,11 +26,19 @@ import {
   ACCENT_COLORS, BEARD_STYLES, BROW_STYLES, EYE_STYLES, GLASSES_STYLES,
   HAIR_STYLES, HAT_STYLES, HEAD_METRICS, HEAD_SHAPES, MOUTH_STYLES, NOSE_STYLES,
   makeGenome,
-} from './genome.js?v=df44e11666';
-import { resolveKin } from './kin.js?v=df44e11666';
-import { makeRng } from './rng.js?v=df44e11666';
+} from './genome.js?v=e1ff722724';
+import { resolveKin } from './kin.js?v=e1ff722724';
+import { makeRng } from './rng.js?v=e1ff722724';
 
-/** What a typical front-on portrait measures, in the units photo.js reports. */
+/**
+ * What a typical front-on portrait measures.
+ *
+ * These come *with* the measurement now, because there are two measurers and
+ * they do not agree on definitions. "Face width" from a skin-colour blob and
+ * face width from a landmark oval are different quantities, and a baseline
+ * calibrated for one silently biases every face measured by the other. So each
+ * source declares its own norms and this table is only the fallback.
+ */
 const PHOTO = {
   aspect: 0.66,      // cheek width / (crown → chin)
   jaw: 0.72,         // jaw width / cheek width
@@ -115,8 +123,9 @@ const MOUTH_CURVE = {
  * They stay reachable: pinning one in the sidebar still wins, as pins always do.
  */
 const NOT_FOR_A_LIKENESS = {
-  eyes: ['cross', 'star', 'spiral', 'googly', 'teary', 'wink', 'closed', 'hollow', 'sideways'],
+  eyes: ['cross', 'star', 'spiral', 'googly', 'teary', 'wink', 'closed', 'hollow', 'sideways', 'mismatched'],
   mouth: ['tongue', 'drool', 'fangs', 'stitched', 'zigzag', 'buck', 'gap'],
+  beard: ['handlebar', 'fuManchu', 'braided', 'neckbeard'],
   nose: ['snout', 'broken'],
   brows: ['zigzag'],
 };
@@ -182,6 +191,7 @@ function nearestHead(target) {
 export function readMeasurement(m) {
   const notes = [];
   const trust = clamp(0.45 + m.confidence * 0.55, 0.4, 1);
+  const norm = { ...PHOTO, ...(m.norms || {}) };
 
   // ---------------------------------------------------------------- skull ---
   // The chin is measured independently of the eye/mouth ruler, so their
@@ -190,10 +200,10 @@ export function readMeasurement(m) {
   const chinT = clamp((m.head.chinY - m.head.crownY) / m.head.headH, 0.72, 1.3);
   const headH = m.head.headH * chinT;
 
-  const aspectF = temper((m.head.faceW / headH) / PHOTO.aspect, trust);
-  const jawF = temper(m.ratios.jaw / PHOTO.jaw, trust);
-  const browF = temper(m.ratios.brow / PHOTO.brow, trust);
-  const fillF = temper(m.ratios.fill / PHOTO.fill, trust * 0.7);
+  const aspectF = temper((m.head.faceW / headH) / norm.aspect, trust);
+  const jawF = temper(m.ratios.jaw / norm.jaw, trust);
+  const browF = temper(m.ratios.brow / norm.brow, trust);
+  const fillF = temper(m.ratios.fill / norm.fill, trust * 0.7);
 
   const targets = {
     // Hold the drawn head's area and move only its proportion, so a wide face
@@ -209,10 +219,10 @@ export function readMeasurement(m) {
     noseT: clamp(m.nose.t / chinT, 0.5, 0.7),
     mouthT: clamp(0.76 / chinT, 0.66, 0.86),
 
-    eyeSpacing: clamp(DOODLE.eyeSpacing * temper(m.eyes.spacing / PHOTO.eyeSpacing, trust), 0.3, 0.6),
-    eyeSize: clamp(DOODLE.eyeSize * temper(m.eyes.width / PHOTO.eyeWidth, trust * 0.85), 0.62, 1.55),
-    noseSize: clamp(DOODLE.noseSize * temper(m.nose.width / PHOTO.noseWidth, trust * 0.8), 0.62, 1.5),
-    mouthW: clamp(DOODLE.mouthW * temper(m.mouth.width / PHOTO.mouthWidth, trust * 0.85), 0.68, 1.45),
+    eyeSpacing: clamp(DOODLE.eyeSpacing * temper(m.eyes.spacing / norm.eyeSpacing, trust), 0.3, 0.6),
+    eyeSize: clamp(DOODLE.eyeSize * temper(m.eyes.width / norm.eyeWidth, trust * 0.85), 0.62, 1.55),
+    noseSize: clamp(DOODLE.noseSize * temper(m.nose.width / norm.noseWidth, trust * 0.8), 0.62, 1.5),
+    mouthW: clamp(DOODLE.mouthW * temper(m.mouth.width / norm.mouthWidth, trust * 0.85), 0.68, 1.45),
 
     yaw: m.yaw,
     tilt: m.tilt,
@@ -253,7 +263,7 @@ export function readMeasurement(m) {
             : ['line', 'wavy', 'pursed', 'smirk', 'dot'];
 
   // ----------------------------------------------------------------- nose ---
-  const nw = m.nose.width / PHOTO.noseWidth;
+  const nw = m.nose.width / norm.noseWidth;
   const noseSet =
     nw > 1.25 ? ['wide', 'bulb', 'flat', 'snub']
       : nw < 0.8 ? ['tiny', 'button', 'twoLines', 'long']
@@ -286,8 +296,13 @@ export function readMeasurement(m) {
     hairSet = side > 0.28
       ? ['bob', 'mop', 'waves', 'fringe', 'curly']
       : ['messy', 'shortHatch', 'waves', 'bowl', 'fringe', 'spiky'];
+  } else if (volume < 1.5) {
+    hairSet = ['messy', 'mop', 'curly', 'pompadour', 'spiky'];
   } else {
-    hairSet = ['afro', 'curly', 'mop', 'messy', 'pompadour', 'spiky'];
+    // Only genuinely enormous hair. Thick hair swept up measures over 1.0 all
+    // the time, and offering an afro at that point put one on people who have
+    // nothing of the kind.
+    hairSet = ['afro', 'curly', 'mop'];
   }
 
   const tone = m.hair.luma < 72 ? 'dark' : m.hair.luma < 142 ? 'mid' : 'light';
@@ -299,8 +314,11 @@ export function readMeasurement(m) {
     beardSet = b.jawline > 0.55 ? ['full', 'longBeard', 'muttonChops'] : ['goatee', 'vandyke', 'chinStrap'];
   } else if (b.amount > 0.58) {
     beardSet = b.jawline > 0.5 ? ['full', 'chinStrap', 'stubble'] : ['goatee', 'vandyke', 'soulPatch', 'stubble'];
-  } else if (b.moustache > 0.75 && b.amount > 0.22) {
-    beardSet = ['mustache', 'handlebar', 'fuManchu'];
+  } else if (b.moustache > 1.05 && b.amount > 0.22) {
+    // A high bar, and no flourishes. Stubble reads as *some* darkness on the
+    // upper lip on almost everybody, and at the old threshold a three-day beard
+    // came back as a waxed handlebar on a third of a corpus.
+    beardSet = ['mustache', 'stubble'];
   } else if (b.amount > 0.3) {
     beardSet = ['stubble', 'soulPatch', 'none'];
   } else {
@@ -332,7 +350,7 @@ export function readMeasurement(m) {
     nose: sober('nose', noseSet),
     mouth: sober('mouth', mouthSet),
     hair: hairSet,
-    beard: beardSet,
+    beard: sober('beard', beardSet),
     glasses: glassesSet || ['none'],
   };
 

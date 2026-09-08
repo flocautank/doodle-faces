@@ -10,7 +10,7 @@
  * Drawn *before* the ink, so the pen work stays on top and stays legible.
  */
 
-import { closedCurve, ellipsePath, pt } from './ink.js?v=df44e11666';
+import { closedCurve, ellipsePath, pt } from './ink.js?v=e1ff722724';
 
 /**
  * @param {object} ink        an ink instance from makeInk()

@@ -371,6 +371,9 @@ body[data-mode="compare"] .sheet-only { display: none !important; }
   color: var(--ink-soft);
 }
 
+/* The same line carries errors and progress; a note is not a failure. */
+.err.is-note { color: var(--ink-soft); }
+
 .photo-preview {
   margin: 8px 0;
   line-height: 0;
@@ -534,11 +537,12 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
           can. It stays a doodle: it is a likeness, not a portrait.
         </p>
         <p class="note keep">
-          <b>The photo never leaves this tab.</b> There is nothing to upload it
-          to — this is a static site, and the measuring runs in your browser.
-          Nothing is written to disk, nothing is kept between visits, and
-          <b>Forget</b> or a reload drops it. The share link carries the
-          resulting numbers, never the picture.
+          <b>The photo never leaves this tab.</b> This is a static site with no
+          server behind it; the face detector is fetched <i>to</i> your browser
+          (about 6&nbsp;MB, once, on first use) and the measuring happens here.
+          Nothing is uploaded, nothing is written to disk, nothing is kept
+          between visits, and <b>Forget</b> or a reload drops it. The share link
+          carries the resulting numbers, never the picture.
         </p>
         <div id="drop" class="drop-zone">
           <input id="photoFile" type="file" accept="image/*" hidden>
@@ -744,7 +748,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
 
 <script>
 (() => {
-  // src/faces/rng.js?v=df44e11666
+  // src/faces/rng.js?v=e1ff722724
   function hashSeed(seed) {
     if (typeof seed == "number" && Number.isFinite(seed))
       return seed >>> 0 || 2654435769;
@@ -785,9 +789,9 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
         return entries[entries.length - 1][0];
       },
       /** roughly normal distribution, clamped to +/- 3 sigma */
-      gauss: (mean = 0, sigma = 1) => {
+      gauss: (mean2 = 0, sigma = 1) => {
         let u = Math.max(next(), 1e-9), v = next(), n = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-        return mean + Math.max(-3, Math.min(3, n)) * sigma;
+        return mean2 + Math.max(-3, Math.min(3, n)) * sigma;
       },
       /** derive an independent stream (so adding features never shifts old ones) */
       fork: (tag) => makeRng(hashSeed(tag) ^ Math.floor(next() * 4294967295))
@@ -814,7 +818,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     };
   }
 
-  // src/faces/kin.js?v=df44e11666
+  // src/faces/kin.js?v=e1ff722724
   var KIN_NAMES = [
     "human",
     "child",
@@ -1027,7 +1031,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     };
   }
 
-  // src/faces/looks.js?v=df44e11666
+  // src/faces/looks.js?v=e1ff722724
   var LOOK_NAMES = [
     "plain",
     "finance",
@@ -1290,7 +1294,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     beast: ["finance", "bobo", "scholar", "noble", "detective"]
   };
 
-  // src/faces/genome.js?v=df44e11666
+  // src/faces/genome.js?v=e1ff722724
   var HEAD_SHAPES = [
     "round",
     "oval",
@@ -1858,7 +1862,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     brick: { w: 33, h: 40, jaw: 1.1, brow: 1.12, exp: 3.6 }
   };
 
-  // src/faces/ink.js?v=df44e11666
+  // src/faces/ink.js?v=e1ff722724
   function pt(x, y) {
     return { x, y };
   }
@@ -2215,7 +2219,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     ctx.restore();
   }
 
-  // src/faces/anatomy.js?v=df44e11666
+  // src/faces/anatomy.js?v=e1ff722724
   function curveAt(points, t) {
     for (let i = 0; i < points.length - 1; i++) {
       let [t0, v0] = points[i], [t1, v1] = points[i + 1];
@@ -2315,7 +2319,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     };
   }
 
-  // src/faces/accessories.js?v=df44e11666
+  // src/faces/accessories.js?v=e1ff722724
   function lensRegions(an, g) {
     let gl = g.glasses;
     if (gl.style === "none") return [];
@@ -2747,7 +2751,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     return [p.x, p.y];
   }
 
-  // src/faces/features.js?v=df44e11666
+  // src/faces/features.js?v=e1ff722724
   function withTilt(an, x, y) {
     let p = an.tiltPoint(pt(x, y));
     return [p.x, p.y];
@@ -3673,7 +3677,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     ink.stroke(an.tiltPath(smoke), { width: 0.5, passes: 1, wobble: 1.1, alpha: 0.35 });
   }
 
-  // src/faces/hair.js?v=df44e11666
+  // src/faces/hair.js?v=e1ff722724
   var HAIR_PARAMS = {
     buzz: { puffX: 0.01, puffY: 0.04, hairT: 0.28, sideT: 0.3, hairline: "straight", render: "stipple" },
     shortHatch: { puffX: 0.03, puffY: 0.1, hairT: 0.26, sideT: 0.32, hairline: "wavy", render: "flow", len: 5 },
@@ -4257,7 +4261,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     return [...right, ...left.reverse()];
   }
 
-  // src/faces/color.js?v=df44e11666
+  // src/faces/color.js?v=e1ff722724
   function drawAccents(ink, an, g, regions = {}) {
     let accents = g.accents || [];
     if (accents.length !== 0)
@@ -4343,7 +4347,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     });
   }
 
-  // src/faces/presets.js?v=df44e11666
+  // src/faces/presets.js?v=e1ff722724
   var PRESETS = {
     /** The reference look: a notebook margin, mostly humans, the odd oddity. */
     notebook: {
@@ -4414,7 +4418,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     }
   }, PRESET_NAMES = Object.keys(PRESETS);
 
-  // src/faces/recipes.js?v=df44e11666
+  // src/faces/recipes.js?v=e1ff722724
   var RECIPES = {
     /**
      * The knitted-beanie-and-black-shades portrait: hatched wool with a nub on
@@ -4446,7 +4450,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     }
   }, RECIPE_NAMES = Object.keys(RECIPES);
 
-  // src/faces/breed.js?v=df44e11666
+  // src/faces/breed.js?v=e1ff722724
   var DISCRETE = /* @__PURE__ */ new Set([
     "kin",
     "look",
@@ -4491,7 +4495,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     return v;
   }
 
-  // src/faces/face.js?v=df44e11666
+  // src/faces/face.js?v=e1ff722724
   var BOX = 128;
   function drawFace(ctx, face, opts2 = {}) {
     let g = typeof face == "object" && face !== null && face.head ? face : makeGenome(face, opts2), size = opts2.size ?? Math.min(ctx.canvas.width, ctx.canvas.height), ox = opts2.x ?? 0, oy = opts2.y ?? 0;
@@ -4580,7 +4584,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     }), canvas;
   }
 
-  // src/faces/atlas.js?v=df44e11666
+  // src/faces/atlas.js?v=e1ff722724
   function buildAtlas(faces, opts2 = {}) {
     let cell = opts2.cell ?? 192, cols = opts2.cols ?? Math.ceil(Math.sqrt(faces.length)), rows = Math.ceil(faces.length / cols), canvas = document.createElement("canvas");
     canvas.width = cols * cell, canvas.height = rows * cell;
@@ -4629,7 +4633,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     return Array.from({ length: count }, (_, i) => `${rootSeed}#${i}`);
   }
 
-  // src/faces/photo.js?v=df44e11666
+  // src/faces/photo.js?v=e1ff722724
   function luma(d, i) {
     return 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
   }
@@ -4928,7 +4932,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
       }
       let n = found.length;
       if (n < 8) return 0;
-      let edge = Math.max(1, Math.round(n * 0.2)), mean = (list) => list.reduce((p, q) => p + q, 0) / list.length, corners = (mean(found.slice(0, edge)) + mean(found.slice(n - edge))) / 2, mid = mean(found.slice(Math.round(n * 0.38), Math.round(n * 0.62) + 1));
+      let edge = Math.max(1, Math.round(n * 0.2)), mean2 = (list) => list.reduce((p, q) => p + q, 0) / list.length, corners = (mean2(found.slice(0, edge)) + mean2(found.slice(n - edge))) / 2, mid = mean2(found.slice(Math.round(n * 0.38), Math.round(n * 0.62) + 1));
       return clamp4((mid - corners) / (headH * 0.035), -1.6, 1.6);
     })(), teeth = (() => {
       let cheekLuma = 255 - cheekRef, half = Math.max(1, Math.round(mouthBand * 0.5)), bright = 0, n = 0;
@@ -5045,9 +5049,23 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     })(), eyeMid = (eyeL + eyeR) / 2, silRow = Math.max(0, Math.min(h - 1, eyeY)), silCentre = rowMin[silRow] < 0 ? cx : (rowMin[silRow] + rowMax[silRow]) / 2, drift = (eyeMid - silCentre) / (faceW / 2), yaw = clamp4(Math.atan(drift * 0.9), -0.34, 0.34), symmetry = 1 - Math.min(1, Math.abs(Math.abs(eyeL - cx) - Math.abs(eyeR - cx)) / (faceW * 0.25)), eyeSep = clamp4((interEye / faceW - 0.24) / 0.24, 0, 1), bandSep = clamp4((dark[eyeY] - cheekRef) / 45, 0, 1), proportion = 1 - Math.min(1, Math.abs(headH / (faceH / 0.73) - 1)), confidence = clamp4(0.25 * symmetry + 0.25 * eyeSep + 0.3 * bandSep + 0.2 * proportion, 0, 1);
     return confidence < 0.45 && notes.push("low confidence \u2014 a plain, front-on, well-lit photo works best"), {
       ok: !0,
+      source: "pixels",
       confidence,
       notes,
       image: { w, h },
+      // This measurer's own norms, so recalibrating the landmark one cannot
+      // quietly bias this one. See `PHOTO` in fit.js.
+      norms: {
+        aspect: 0.66,
+        jaw: 0.72,
+        brow: 0.88,
+        fill: 0.78,
+        eyeSpacing: 0.44,
+        eyeWidth: 0.2,
+        aperture: 0.34,
+        noseWidth: 0.25,
+        mouthWidth: 0.36
+      },
       head: { crownY, chinY: chin, hairlineY: hairline, cx, faceW, headH },
       ratios: {
         // cheek width against the head's own height — the master ratio
@@ -5087,7 +5105,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     };
   }
 
-  // src/faces/fit.js?v=df44e11666
+  // src/faces/fit.js?v=e1ff722724
   var PHOTO = {
     aspect: 0.66,
     // cheek width / (crown → chin)
@@ -5225,8 +5243,9 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     drool: 0,
     frown: -1
   }, NOT_FOR_A_LIKENESS = {
-    eyes: ["cross", "star", "spiral", "googly", "teary", "wink", "closed", "hollow", "sideways"],
+    eyes: ["cross", "star", "spiral", "googly", "teary", "wink", "closed", "hollow", "sideways", "mismatched"],
     mouth: ["tongue", "drool", "fangs", "stitched", "zigzag", "buck", "gap"],
+    beard: ["handlebar", "fuManchu", "braided", "neckbeard"],
     nose: ["snout", "broken"],
     brows: ["zigzag"]
   };
@@ -5251,7 +5270,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     return best;
   }
   function readMeasurement(m) {
-    let notes = [], trust = clamp5(0.45 + m.confidence * 0.55, 0.4, 1), chinT = clamp5((m.head.chinY - m.head.crownY) / m.head.headH, 0.72, 1.3), headH = m.head.headH * chinT, aspectF = temper(m.head.faceW / headH / PHOTO.aspect, trust), jawF = temper(m.ratios.jaw / PHOTO.jaw, trust), browF = temper(m.ratios.brow / PHOTO.brow, trust), fillF = temper(m.ratios.fill / PHOTO.fill, trust * 0.7), targets = {
+    let notes = [], trust = clamp5(0.45 + m.confidence * 0.55, 0.4, 1), norm = { ...PHOTO, ...m.norms || {} }, chinT = clamp5((m.head.chinY - m.head.crownY) / m.head.headH, 0.72, 1.3), headH = m.head.headH * chinT, aspectF = temper(m.head.faceW / headH / norm.aspect, trust), jawF = temper(m.ratios.jaw / norm.jaw, trust), browF = temper(m.ratios.brow / norm.brow, trust), fillF = temper(m.ratios.fill / norm.fill, trust * 0.7), targets = {
       // Hold the drawn head's area and move only its proportion, so a wide face
       // does not also arrive as a giant one.
       aspect: clamp5(DOODLE.aspect * aspectF, 0.62, 1.18),
@@ -5263,10 +5282,10 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
       eyeT: clamp5(0.46 / chinT, 0.38, 0.54),
       noseT: clamp5(m.nose.t / chinT, 0.5, 0.7),
       mouthT: clamp5(0.76 / chinT, 0.66, 0.86),
-      eyeSpacing: clamp5(DOODLE.eyeSpacing * temper(m.eyes.spacing / PHOTO.eyeSpacing, trust), 0.3, 0.6),
-      eyeSize: clamp5(DOODLE.eyeSize * temper(m.eyes.width / PHOTO.eyeWidth, trust * 0.85), 0.62, 1.55),
-      noseSize: clamp5(DOODLE.noseSize * temper(m.nose.width / PHOTO.noseWidth, trust * 0.8), 0.62, 1.5),
-      mouthW: clamp5(DOODLE.mouthW * temper(m.mouth.width / PHOTO.mouthWidth, trust * 0.85), 0.68, 1.45),
+      eyeSpacing: clamp5(DOODLE.eyeSpacing * temper(m.eyes.spacing / norm.eyeSpacing, trust), 0.3, 0.6),
+      eyeSize: clamp5(DOODLE.eyeSize * temper(m.eyes.width / norm.eyeWidth, trust * 0.85), 0.62, 1.55),
+      noseSize: clamp5(DOODLE.noseSize * temper(m.nose.width / norm.noseWidth, trust * 0.8), 0.62, 1.5),
+      mouthW: clamp5(DOODLE.mouthW * temper(m.mouth.width / norm.mouthWidth, trust * 0.85), 0.68, 1.45),
       yaw: m.yaw,
       tilt: m.tilt,
       // The measured curvature is the whole expression signal, and it is a
@@ -5278,12 +5297,12 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
       mouthCurve: m.mouth.curve
     };
     targets.head = nearestHead(targets);
-    let ap = m.eyes.aperture, eyeSet = ap < 0.14 ? ["line", "closed", "slit", "sleepy"] : ap < 0.24 ? ["sleepy", "squint", "slit", "line", "angry"] : ap < 0.4 ? ["oval", "beady", "wonky", "mismatched", "glare", "sideways"] : ap < 0.62 ? ["oval", "round", "dot", "teary", "wonky"] : ["round", "wide", "googly", "hollow"], bs = m.brows.strength, browSet = bs < 0.26 ? ["none", "sparse", "thin"] : bs < 0.6 ? ["thin", "stubby", "sparse", "arched"] : bs < 1.02 ? ["thick", "angled", "arched", "worried"] : ["bushy", "thick", "angled"], c = m.mouth.curve, mouthSet = m.mouth.teeth > 0.2 ? ["teeth", "grin", "open", "smile"] : c > 0.55 ? ["smile", "grin", "smirk"] : c > 0.18 ? ["smile", "smirk", "line", "wavy"] : c < -0.45 ? ["frown", "pursed", "line"] : ["line", "wavy", "pursed", "smirk", "dot"], nw = m.nose.width / PHOTO.noseWidth, noseSet = nw > 1.25 ? ["wide", "bulb", "flat", "snub"] : nw < 0.8 ? ["tiny", "button", "twoLines", "long"] : ["twoLines", "hook", "roman", "triangle", "button", "long"], hat = null, volume = m.hair.volume;
+    let ap = m.eyes.aperture, eyeSet = ap < 0.14 ? ["line", "closed", "slit", "sleepy"] : ap < 0.24 ? ["sleepy", "squint", "slit", "line", "angry"] : ap < 0.4 ? ["oval", "beady", "wonky", "mismatched", "glare", "sideways"] : ap < 0.62 ? ["oval", "round", "dot", "teary", "wonky"] : ["round", "wide", "googly", "hollow"], bs = m.brows.strength, browSet = bs < 0.26 ? ["none", "sparse", "thin"] : bs < 0.6 ? ["thin", "stubby", "sparse", "arched"] : bs < 1.02 ? ["thick", "angled", "arched", "worried"] : ["bushy", "thick", "angled"], c = m.mouth.curve, mouthSet = m.mouth.teeth > 0.2 ? ["teeth", "grin", "open", "smile"] : c > 0.55 ? ["smile", "grin", "smirk"] : c > 0.18 ? ["smile", "smirk", "line", "wavy"] : c < -0.45 ? ["frown", "pursed", "line"] : ["line", "wavy", "pursed", "smirk", "dot"], nw = m.nose.width / norm.noseWidth, noseSet = nw > 1.25 ? ["wide", "bulb", "flat", "snub"] : nw < 0.8 ? ["tiny", "button", "twoLines", "long"] : ["twoLines", "hook", "roman", "triangle", "button", "long"], hat = null, volume = m.hair.volume;
     m.hair.trusted && volume > 0.92 && m.hair.rough < 9 && (hat = m.hair.luma > 150 ? "cap" : "beanie", volume = clamp5(volume - 0.8, 0, 1), notes.push("smooth, tall crown \u2014 read as headwear rather than hair"));
     let side = m.hair.side, hairSet;
-    m.hair.trusted ? side > 0.5 ? hairSet = ["long", "dreads", "braids", "bob", "waves", "ponytail"] : volume < 0.22 ? hairSet = ["none", "buzz", "receding", "shortHatch"] : volume < 0.55 ? hairSet = ["shortHatch", "buzz", "combover", "flatTop", "receding", "cornrows"] : volume < 1.05 ? hairSet = side > 0.28 ? ["bob", "mop", "waves", "fringe", "curly"] : ["messy", "shortHatch", "waves", "bowl", "fringe", "spiky"] : hairSet = ["afro", "curly", "mop", "messy", "pompadour", "spiky"] : (hairSet = ["shortHatch", "messy", "mop", "waves", "buzz", "fringe"], notes.push("hair could not be measured \u2014 picked something ordinary"));
+    m.hair.trusted ? side > 0.5 ? hairSet = ["long", "dreads", "braids", "bob", "waves", "ponytail"] : volume < 0.22 ? hairSet = ["none", "buzz", "receding", "shortHatch"] : volume < 0.55 ? hairSet = ["shortHatch", "buzz", "combover", "flatTop", "receding", "cornrows"] : volume < 1.05 ? hairSet = side > 0.28 ? ["bob", "mop", "waves", "fringe", "curly"] : ["messy", "shortHatch", "waves", "bowl", "fringe", "spiky"] : volume < 1.5 ? hairSet = ["messy", "mop", "curly", "pompadour", "spiky"] : hairSet = ["afro", "curly", "mop"] : (hairSet = ["shortHatch", "messy", "mop", "waves", "buzz", "fringe"], notes.push("hair could not be measured \u2014 picked something ordinary"));
     let tone = m.hair.luma < 72 ? "dark" : m.hair.luma < 142 ? "mid" : "light", b = m.beard, beardSet = null;
-    b.amount > 1.05 ? beardSet = b.jawline > 0.55 ? ["full", "longBeard", "muttonChops"] : ["goatee", "vandyke", "chinStrap"] : b.amount > 0.58 ? beardSet = b.jawline > 0.5 ? ["full", "chinStrap", "stubble"] : ["goatee", "vandyke", "soulPatch", "stubble"] : b.moustache > 0.75 && b.amount > 0.22 ? beardSet = ["mustache", "handlebar", "fuManchu"] : b.amount > 0.3 ? beardSet = ["stubble", "soulPatch", "none"] : beardSet = ["none"];
+    b.amount > 1.05 ? beardSet = b.jawline > 0.55 ? ["full", "longBeard", "muttonChops"] : ["goatee", "vandyke", "chinStrap"] : b.amount > 0.58 ? beardSet = b.jawline > 0.5 ? ["full", "chinStrap", "stubble"] : ["goatee", "vandyke", "soulPatch", "stubble"] : b.moustache > 1.05 && b.amount > 0.22 ? beardSet = ["mustache", "stubble"] : b.amount > 0.3 ? beardSet = ["stubble", "soulPatch", "none"] : beardSet = ["none"];
     let glassesSet = null;
     m.glasses.amount > 0.78 ? glassesSet = m.glasses.dark ? ["sunglasses", "aviator"] : ["round", "square", "halfRim", "cateye"] : m.glasses.amount > 0.52 && (glassesSet = ["none", "round", "square", "halfRim"]);
     let sets = {
@@ -5293,7 +5312,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
       nose: sober("nose", noseSet),
       mouth: sober("mouth", mouthSet),
       hair: hairSet,
-      beard: beardSet,
+      beard: sober("beard", beardSet),
       glasses: glassesSet || ["none"]
     }, weights = {
       head: favour(HEAD_SHAPES, sets.head, 200),
@@ -5379,8 +5398,336 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     return best.seed = `${seed}#fit`, { genome: best, read, tried: tries, score: bestScore };
   }
 
+  // src/faces/landmarks.js?v=e1ff722724
+  var CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14", MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+  var ready = null;
+  function loadLandmarker() {
+    return ready || (ready = (async () => {
+      let vision = await import(`${CDN}/vision_bundle.mjs`), files = await vision.FilesetResolver.forVisionTasks(`${CDN}/wasm`);
+      return vision.FaceLandmarker.createFromOptions(files, {
+        baseOptions: { modelAssetPath: MODEL, delegate: "GPU" },
+        // Blendshapes are the reason to take the full landmarker rather than the
+        // small detector: they read a smile straight off the face, which is a far
+        // steadier signal than chasing the darkest row along a lip.
+        outputFaceBlendshapes: !0,
+        outputFacialTransformationMatrixes: !0,
+        runningMode: "IMAGE",
+        numFaces: 5
+      });
+    })().catch(() => (ready = null, null)), ready);
+  }
+  function isLoaded() {
+    return ready !== null;
+  }
+  async function detectFace(image) {
+    let landmarker = await loadLandmarker();
+    if (!landmarker) return null;
+    let w = image.naturalWidth || image.width, h = image.naturalHeight || image.height, result;
+    try {
+      result = landmarker.detect(image);
+    } catch {
+      return null;
+    }
+    let all = result?.faceLandmarks || [];
+    if (all.length === 0) return null;
+    let best = 0, bestW = -1;
+    for (let i = 0; i < all.length; i++) {
+      let lm = all[i], width = Math.abs(lm[454].x - lm[234].x);
+      width > bestW && (bestW = width, best = i);
+    }
+    let points = all[best].map((p) => ({ x: p.x * w, y: p.y * h, z: p.z * w })), shapes = {};
+    for (let c of result.faceBlendshapes?.[best]?.categories || [])
+      shapes[c.categoryName] = c.score;
+    return {
+      points,
+      shapes,
+      matrix: result.facialTransformationMatrixes?.[best]?.data || null,
+      faces: all.length
+    };
+  }
+
+  // src/faces/measure.js?v=e1ff722724
+  function luma2(d, i) {
+    return 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+  }
+  function clamp6(v, lo, hi) {
+    return v < lo ? lo : v > hi ? hi : v;
+  }
+  var OVAL = [
+    10,
+    338,
+    297,
+    332,
+    284,
+    251,
+    389,
+    356,
+    454,
+    323,
+    361,
+    288,
+    397,
+    365,
+    379,
+    378,
+    400,
+    377,
+    152,
+    148,
+    176,
+    149,
+    150,
+    136,
+    172,
+    58,
+    132,
+    93,
+    234,
+    127,
+    162,
+    21,
+    54,
+    103,
+    67,
+    109
+  ], P = {
+    chin: 152,
+    foreheadTop: 10,
+    cheekR: 234,
+    cheekL: 454,
+    jawR: 172,
+    jawL: 397,
+    eyeROuter: 33,
+    eyeRInner: 133,
+    eyeRTop: 159,
+    eyeRBottom: 145,
+    eyeLOuter: 263,
+    eyeLInner: 362,
+    eyeLTop: 386,
+    eyeLBottom: 374,
+    irisR: 468,
+    irisL: 473,
+    browR: [70, 63, 105, 66, 107],
+    browL: [336, 296, 334, 293, 300],
+    noseTip: 1,
+    noseBridge: 168,
+    noseBase: 2,
+    alaR: 129,
+    alaL: 358,
+    lipR: 61,
+    lipL: 291,
+    lipInnerTop: 13,
+    lipInnerBottom: 14,
+    lipOuterTop: 0,
+    lipOuterBottom: 17,
+    midCheekR: 50,
+    midCheekL: 280,
+    templeR: 127,
+    templeL: 356
+  }, mean = (list, get) => list.reduce((s, v) => s + get(v), 0) / list.length;
+  function widthAt(poly, y) {
+    let lo = 1 / 0, hi = -1 / 0;
+    for (let i = 0; i < poly.length; i++) {
+      let a = poly[i], b = poly[(i + 1) % poly.length];
+      if (a.y <= y && b.y >= y || b.y <= y && a.y >= y) {
+        if (a.y === b.y) continue;
+        let x = a.x + (y - a.y) / (b.y - a.y) * (b.x - a.x);
+        x < lo && (lo = x), x > hi && (hi = x);
+      }
+    }
+    return hi > lo ? hi - lo : 0;
+  }
+  function polyArea(poly) {
+    let a = 0;
+    for (let i = 0; i < poly.length; i++) {
+      let p = poly[i], q = poly[(i + 1) % poly.length];
+      a += p.x * q.y - q.x * p.y;
+    }
+    return Math.abs(a) / 2;
+  }
+  function measureFromLandmarks(img, face) {
+    let { width: w, height: h, data } = img, pts = face.points, shapes = face.shapes || {}, notes = [], at = (i) => pts[i], hasIris = pts.length >= 478, eyeR = hasIris ? at(P.irisR) : {
+      x: (at(P.eyeROuter).x + at(P.eyeRInner).x) / 2,
+      y: (at(P.eyeROuter).y + at(P.eyeRInner).y) / 2
+    }, eyeL = hasIris ? at(P.irisL) : {
+      x: (at(P.eyeLOuter).x + at(P.eyeLInner).x) / 2,
+      y: (at(P.eyeLOuter).y + at(P.eyeLInner).y) / 2
+    }, roll = Math.atan2(eyeL.y - eyeR.y, eyeL.x - eyeR.x), ox = (eyeR.x + eyeL.x) / 2, oy = (eyeR.y + eyeL.y) / 2, cos = Math.cos(-roll), sin = Math.sin(-roll), A = (p) => ({ x: ox + (p.x - ox) * cos - (p.y - oy) * sin, y: oy + (p.x - ox) * sin + (p.y - oy) * cos }), a = {};
+    for (let key of Object.keys(P)) {
+      let v = P[key];
+      a[key] = Array.isArray(v) ? v.map((i) => A(at(i))) : A(at(v));
+    }
+    let aEyeR = A(eyeR), aEyeL = A(eyeL), oval = OVAL.map((i) => A(at(i))), faceW = Math.max(8, Math.abs(a.cheekL.x - a.cheekR.x)), eyeY = (aEyeR.y + aEyeL.y) / 2, eyeGap = Math.abs(aEyeL.x - aEyeR.x), mouthY = (a.lipInnerTop.y + a.lipInnerBottom.y) / 2, headH = Math.max(4, mouthY - eyeY) / 0.3, crownY = eyeY - headH * 0.46, chinY = a.chin.y, hairlineY = a.foreheadTop.y, faceH = Math.max(8, chinY - hairlineY), cx = (a.cheekR.x + a.cheekL.x) / 2, eyeWidth = (Math.abs(a.eyeRInner.x - a.eyeROuter.x) + Math.abs(a.eyeLOuter.x - a.eyeLInner.x)) / 2, lidR = Math.abs(a.eyeRBottom.y - a.eyeRTop.y), lidL = Math.abs(a.eyeLBottom.y - a.eyeLTop.y), aperture = clamp6((lidR + lidL) / 2 / Math.max(1, eyeWidth), 0.05, 1.4), disc = (p, r) => {
+      let dark = 0, rough = 0, n = 0, rr = Math.max(1, Math.round(r));
+      for (let y = Math.round(p.y - rr); y <= Math.round(p.y + rr); y++)
+        if (!(y < 1 || y >= h - 1))
+          for (let x = Math.round(p.x - rr); x <= Math.round(p.x + rr); x++)
+            x < 1 || x >= w - 1 || (x - p.x) ** 2 + (y - p.y) ** 2 > rr * rr || (dark += 255 - luma2(data, (y * w + x) * 4), rough += Math.abs(luma2(data, (y * w + x + 1) * 4) - luma2(data, (y * w + x - 1) * 4)), n++);
+      return n > 3 ? { dark: dark / n, rough: rough / n, n } : null;
+    }, rgbAt = (p, r) => {
+      let R = 0, G = 0, B = 0, n = 0, rr = Math.max(1, Math.round(r));
+      for (let y = Math.round(p.y - rr); y <= Math.round(p.y + rr); y++)
+        if (!(y < 0 || y >= h))
+          for (let x = Math.round(p.x - rr); x <= Math.round(p.x + rr); x++) {
+            if (x < 0 || x >= w) continue;
+            let i = (y * w + x) * 4;
+            R += data[i], G += data[i + 1], B += data[i + 2], n++;
+          }
+      return n ? [R / n, G / n, B / n] : null;
+    }, unit = faceW * 0.06, cheekPatch = [disc(at(P.midCheekR), unit), disc(at(P.midCheekL), unit)].filter(Boolean), cheek = cheekPatch.length ? { dark: mean(cheekPatch, (p) => p.dark), rough: mean(cheekPatch, (p) => p.rough) } : { dark: 90, rough: 8 }, cheekRef = cheek.dark, browDiscs = [...P.browR, ...P.browL].map((i) => disc(at(i), unit * 0.55)).filter(Boolean), browDark = browDiscs.length ? mean(browDiscs, (p) => p.dark) : cheekRef, browStrength = clamp6((browDark - cheekRef) / 40, 0, 2), mouthWidth = Math.abs(a.lipL.x - a.lipR.x), corners = (a.lipR.y + a.lipL.y) / 2, geoCurve = (mouthY - corners) / (headH * 0.035), smile = ((shapes.mouthSmileLeft || 0) + (shapes.mouthSmileRight || 0)) / 2, frown = ((shapes.mouthFrownLeft || 0) + (shapes.mouthFrownRight || 0)) / 2, mouthCurve = clamp6(geoCurve * 0.35 + (smile - frown) * 1.9, -1.6, 1.6), beard = (() => {
+      let chinP = disc({
+        x: (at(P.lipOuterBottom).x + at(P.chin).x) / 2,
+        y: (at(P.lipOuterBottom).y + at(P.chin).y) / 2
+      }, unit), lipP = disc({
+        x: (at(P.noseBase).x + at(P.lipOuterTop).x) / 2,
+        y: (at(P.noseBase).y + at(P.lipOuterTop).y) / 2
+      }, unit * 0.8), inward = (i) => ({
+        x: at(i).x + (at(P.noseTip).x - at(i).x) * 0.25,
+        y: at(i).y + (at(P.noseTip).y - at(i).y) * 0.25
+      }), jawP = [disc(inward(P.jawR), unit * 0.9), disc(inward(P.jawL), unit * 0.9)].filter(Boolean), score2 = (p) => p ? clamp6((p.dark - cheek.dark) / 42 * 0.7 + (p.rough - cheek.rough) / 16 * 0.6, 0, 2) : 0;
+      return {
+        amount: score2(chinP),
+        moustache: score2(lipP),
+        jawline: jawP.length ? mean(jawP, score2) : 0
+      };
+    })(), glasses = (() => {
+      let bridge = disc(at(P.noseBridge), unit * 0.6), temples = [
+        disc({ x: at(P.templeR).x * 0.6 + at(P.eyeROuter).x * 0.4, y: at(P.eyeROuter).y }, unit * 0.6),
+        disc({ x: at(P.templeL).x * 0.6 + at(P.eyeLOuter).x * 0.4, y: at(P.eyeLOuter).y }, unit * 0.6)
+      ].filter(Boolean);
+      if (!bridge || temples.length === 0) return { amount: 0, dark: !1 };
+      let b = clamp6((bridge.dark - cheekRef) / 42, 0, 1.4), t = clamp6((mean(temples, (p) => p.dark) - cheekRef) / 42, 0, 1.4), amount = Math.min(b, t) * 1.6, lens = disc(eyeR, unit * 0.5), dark = amount > 0.9 && !!lens && lens.dark > cheekRef + 70;
+      return { amount, dark };
+    })(), hair = (() => {
+      let outR = { x: at(P.cheekR).x - faceW * 0.22, y: eyeR.y }, outL = { x: at(P.cheekL).x + faceW * 0.22, y: eyeL.y }, bgs = [rgbAt(outR, unit), rgbAt(outL, unit)].filter(Boolean);
+      if (bgs.length === 0) return { volume: 0, side: 0, rough: 12, rgb: null, luma: 90, crownY: hairlineY, trusted: !1 };
+      let bg = [0, 1, 2].map((k) => mean(bgs, (c) => c[k])), busy = (bgs.length === 2 ? Math.abs(bgs[0][0] - bgs[1][0]) + Math.abs(bgs[0][1] - bgs[1][1]) + Math.abs(bgs[0][2] - bgs[1][2]) : 0) > 120;
+      busy && notes.push("busy background \u2014 hair volume is a guess");
+      let isBg = (x, y) => {
+        if (x < 0 || y < 0 || x >= w || y >= h) return !0;
+        let i = (y * w + x) * 4;
+        return Math.abs(data[i] - bg[0]) + Math.abs(data[i + 1] - bg[1]) + Math.abs(data[i + 2] - bg[2]) < 76;
+      }, topPoint = at(P.foreheadTop), crown = topPoint.y, R = 0, G = 0, B = 0, rough = 0, n = 0, limit = Math.max(0, Math.round(topPoint.y - headH * 0.62));
+      for (let y = Math.round(topPoint.y) - 1; y >= limit; y--) {
+        let solid = 0, tried = 0;
+        for (let k = -3; k <= 3; k++) {
+          let x = Math.round(topPoint.x + k * faceW * 0.11);
+          if (!(x < 1 || x >= w - 1) && (tried++, !isBg(x, y))) {
+            solid++;
+            let i = (y * w + x) * 4;
+            R += data[i], G += data[i + 1], B += data[i + 2], rough += Math.abs(luma2(data, (y * w + x + 1) * 4) - luma2(data, (y * w + x - 1) * 4)), n++;
+          }
+        }
+        if (tried === 0 || solid / tried < 0.55) break;
+        crown = y;
+      }
+      let volume = clamp6((topPoint.y - crown) / (headH * 0.3), 0, 2.5), side = 0;
+      for (let [edge, dir] of [[at(P.cheekR), -1], [at(P.cheekL), 1]]) {
+        let reach = 0;
+        for (let y = Math.round(eyeY); y <= Math.min(h - 1, chinY + headH * 0.5); y++) {
+          let x = Math.round(edge.x + dir * faceW * 0.1);
+          if (x < 0 || x >= w || isBg(x, y)) break;
+          reach = y - eyeY;
+        }
+        side = Math.max(side, reach / headH);
+      }
+      let rgb = n > 20 ? [R / n, G / n, B / n] : null;
+      return {
+        volume,
+        side: clamp6(side, 0, 1.2),
+        rough: n > 20 ? rough / n : 12,
+        rgb,
+        luma: rgb ? 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2] : 90,
+        crownY: crown,
+        trusted: !busy && n > 20
+      };
+    })(), yaw = (() => {
+      let m = face.matrix;
+      if (m && m.length >= 11)
+        return clamp6(Math.atan2(m[8], m[10]) * 0.62, -0.34, 0.34);
+      let dR = Math.abs(a.noseTip.x - a.cheekR.x), dL = Math.abs(a.cheekL.x - a.noseTip.x);
+      return clamp6((dR - dL) / Math.max(1, dR + dL) * 1.5, -0.34, 0.34);
+    })(), fill = clamp6(faceW / (Math.min(w, h) * 0.5), 0, 1), confidence = clamp6(0.62 + fill * 0.3 - Math.abs(yaw) * 0.5, 0.3, 0.98);
+    return faceW < Math.min(w, h) * 0.16 && notes.push("the face is small in the frame \u2014 a closer crop reads better"), Math.abs(yaw) > 0.28 && notes.push("turned well away from the camera \u2014 the proportions are a projection"), face.faces > 1 && notes.push(`${face.faces} faces found; measured the largest`), {
+      ok: !0,
+      source: "landmarks",
+      confidence,
+      notes,
+      image: { w, h },
+      /**
+       * What an ordinary face measures *under these definitions*.
+       *
+       * Not the same numbers as the pixel measurer's, and they should not be: an
+       * oval traced through landmarks is not the same shape as a skin-colour
+       * blob, so "face width" means something slightly different and a shared
+       * baseline would bias every face by the difference.
+       *
+       * Read off a nineteen-photo corpus, which is one person plus one incidental
+       * second face — enough to separate a definition offset from a personal
+       * trait where the two subjects agree, and not enough to be a population.
+       * Where the two disagreed the published anthropometric figure was kept: the
+       * corpus subject measures 0.50 for eye spacing against the second face's
+       * 0.45, so 0.45 stays and he is drawn, correctly, a little wide-set.
+       */
+      norms: {
+        aspect: 0.56,
+        // both subjects, against 0.66 for the blob definition
+        jaw: 0.71,
+        brow: 0.85,
+        fill: 0.84,
+        // an oval fills its box more than a ragged blob does
+        eyeSpacing: 0.45,
+        eyeWidth: 0.21,
+        aperture: 0.34,
+        noseWidth: 0.29,
+        // both subjects; the alae are wider than the old run
+        mouthWidth: 0.37
+      },
+      head: { crownY, chinY, hairlineY, cx, faceW, headH },
+      ratios: {
+        aspect: faceW / headH,
+        jaw: widthAt(oval, chinY - faceH * 0.16) / faceW,
+        brow: widthAt(oval, hairlineY + faceH * 0.08) / faceW,
+        fill: polyArea(oval) / (faceW * faceH)
+      },
+      eyes: {
+        x: [aEyeR.x, aEyeL.x],
+        y: eyeY,
+        spacing: eyeGap / faceW,
+        width: eyeWidth / faceW,
+        aperture,
+        tilt: roll
+      },
+      brows: { y: mean(a.browR, (p) => p.y), strength: browStrength },
+      nose: {
+        y: a.noseTip.y,
+        width: Math.abs(a.alaL.x - a.alaR.x) / faceW,
+        t: (a.noseTip.y - crownY) / headH
+      },
+      mouth: {
+        y: mouthY,
+        width: mouthWidth / faceW,
+        curve: mouthCurve,
+        teeth: clamp6(shapes.jawOpen || 0, 0, 1),
+        t: (mouthY - crownY) / headH
+      },
+      hair,
+      beard,
+      glasses,
+      skin: { rgb: rgbAt(at(P.midCheekR), unit) || rgbAt(at(P.midCheekL), unit) || [200, 165, 140] },
+      yaw,
+      tilt: clamp6(roll, -0.26, 0.26),
+      eyeT: (eyeY - crownY) / headH,
+      /** Kept for the overlay: the outline the measurement actually used. */
+      oval: oval.map((p) => ({ x: p.x, y: p.y })),
+      ovalRaw: OVAL.map((i) => ({ x: at(i).x, y: at(i).y })),
+      eyesRaw: [{ x: eyeR.x, y: eyeR.y }, { x: eyeL.x, y: eyeL.y }],
+      mouthRaw: { x: (at(P.lipInnerTop).x + at(P.lipInnerBottom).x) / 2, y: (at(P.lipInnerTop).y + at(P.lipInnerBottom).y) / 2 }
+    };
+  }
+
   // app.js
-  var $ = (id) => document.getElementById(id), labelOf = (table, key) => table[key] && table[key].label || key, clamp6 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  var $ = (id) => document.getElementById(id), labelOf = (table, key) => table[key] && table[key].label || key, clamp7 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
   function pretty(v) {
     return v.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
   }
@@ -5738,12 +6085,15 @@ ${labelOf(KIN, g.kin)} \xB7 ${labelOf(LOOKS, g.look)} \xB7 ${labelOf(PEN_STYLES,
   $("focusB").addEventListener("click", () => {
     cmp.b && (focused = JSON.parse(JSON.stringify(cmp.b)), setMode("focus"));
   });
-  var PHOTO_MAX = 320, measured = null, photoSmall = null, photoTake = 0;
+  var PHOTO_MAX = 512, measured = null, photoSmall = null, photoTake = 0;
+  function photoNote(msg) {
+    $("photoError").textContent = msg, $("photoError").hidden = !1, $("photoError").classList.add("is-note");
+  }
   function photoFail(msg) {
-    $("photoError").textContent = msg, $("photoError").hidden = !1, $("photoResult").hidden = !0;
+    $("photoError").classList.remove("is-note"), $("photoError").textContent = msg, $("photoError").hidden = !1, $("photoResult").hidden = !0;
   }
   async function loadPhoto(file) {
-    if ($("photoError").hidden = !0, !file || !file.type.startsWith("image/")) return photoFail("That is not an image file.");
+    if ($("photoError").hidden = !0, $("photoError").classList.remove("is-note"), !file || !file.type.startsWith("image/")) return photoFail("That is not an image file.");
     let bitmap;
     try {
       bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
@@ -5758,14 +6108,21 @@ ${labelOf(KIN, g.kin)} \xB7 ${labelOf(LOOKS, g.look)} \xB7 ${labelOf(PEN_STYLES,
     small.width = cw, small.height = ch;
     let sctx = small.getContext("2d", { willReadFrequently: !0 });
     sctx.drawImage(bitmap, 0, 0, cw, ch), bitmap.close?.();
-    let m;
+    let pixels = sctx.getImageData(0, 0, cw, ch), m = null;
     try {
-      m = measureFace(sctx.getImageData(0, 0, cw, ch));
-    } catch (err) {
-      return photoFail(`The measurement failed: ${err.message}`);
+      isLoaded() || photoNote(`Fetching the face detector \u2014 about ${6.1} MB, once.`);
+      let face = await detectFace(small);
+      face && (m = measureFromLandmarks(pixels, face));
+    } catch {
     }
+    if (!m)
+      try {
+        m = measureFace(pixels);
+      } catch (err) {
+        return photoFail(`The measurement failed: ${err.message}`);
+      }
     if (!m.ok) return photoFail(m.reason);
-    measured = m, photoSmall = small, photoTake = 0, $("photoResult").hidden = !1;
+    $("photoError").hidden = !0, $("photoError").classList.remove("is-note"), measured = m, photoSmall = small, photoTake = 0, $("photoResult").hidden = !1;
     let panel = $("drop").closest("details");
     panel && (panel.open = !0), drawPhotoOverlay(), describeMeasurement(m);
   }
@@ -5776,26 +6133,38 @@ ${labelOf(KIN, g.kin)} \xB7 ${labelOf(LOOKS, g.look)} \xB7 ${labelOf(PEN_STYLES,
     let c = view.getContext("2d");
     c.drawImage(photoSmall, 0, 0, view.width, view.height);
     let S = (v) => v * scale;
-    c.lineWidth = 1, c.strokeStyle = "rgba(176,94,72,.9)", c.setLineDash([3, 3]), c.strokeRect(
-      S(m.head.cx - m.head.faceW / 2),
-      S(m.head.crownY),
-      S(m.head.faceW),
-      S(m.head.chinY - m.head.crownY)
-    ), c.setLineDash([]), c.strokeStyle = "rgba(52,124,113,.95)";
-    for (let y of [m.eyes.y, m.mouth.y])
-      c.beginPath(), c.moveTo(S(m.head.cx - m.head.faceW * 0.5), S(y)), c.lineTo(S(m.head.cx + m.head.faceW * 0.5), S(y)), c.stroke();
-    c.fillStyle = "rgba(52,124,113,.95)";
-    for (let x of m.eyes.x)
-      c.beginPath(), c.arc(S(x), S(m.eyes.y), Math.max(1.5, S(m.head.faceW * 0.02)), 0, Math.PI * 2), c.fill();
+    if (c.lineWidth = 1, c.strokeStyle = "rgba(176,94,72,.9)", m.ovalRaw) {
+      c.beginPath(), m.ovalRaw.forEach((p, i) => i ? c.lineTo(S(p.x), S(p.y)) : c.moveTo(S(p.x), S(p.y))), c.closePath(), c.stroke(), c.fillStyle = "rgba(52,124,113,.95)";
+      for (let p of m.eyesRaw)
+        c.beginPath(), c.arc(S(p.x), S(p.y), 2.5, 0, Math.PI * 2), c.fill();
+      c.fillStyle = "rgba(120,110,180,.95)", c.beginPath(), c.arc(S(m.mouthRaw.x), S(m.mouthRaw.y), 2.5, 0, Math.PI * 2), c.fill();
+    } else {
+      c.setLineDash([3, 3]), c.strokeRect(
+        S(m.head.cx - m.head.faceW / 2),
+        S(m.head.crownY),
+        S(m.head.faceW),
+        S(m.head.chinY - m.head.crownY)
+      ), c.setLineDash([]), c.strokeStyle = "rgba(52,124,113,.95)";
+      for (let y of [m.eyes.y, m.mouth.y])
+        c.beginPath(), c.moveTo(S(m.head.cx - m.head.faceW * 0.5), S(y)), c.lineTo(S(m.head.cx + m.head.faceW * 0.5), S(y)), c.stroke();
+      c.fillStyle = "rgba(52,124,113,.95)";
+      for (let x of m.eyes.x)
+        c.beginPath(), c.arc(S(x), S(m.eyes.y), Math.max(1.5, S(m.head.faceW * 0.02)), 0, Math.PI * 2), c.fill();
+    }
     $("photoPreview").replaceChildren(view);
   }
   function describeMeasurement(m) {
-    let bits = [
-      `confidence ${Math.round(m.confidence * 100)}%`,
-      // 0.66 is what an ordinary portrait measures; the number alone means
-      // nothing to anyone, so say which side of ordinary it falls on.
-      m.ratios.aspect > 0.72 ? "broad head" : m.ratios.aspect < 0.6 ? "narrow head" : "ordinary head",
-      `eyes ${m.eyes.spacing > 0.47 ? "wide-set" : m.eyes.spacing < 0.41 ? "close-set" : "evenly set"}`,
+    let pct = Math.round(m.confidence * 100), norms = m.norms || {}, ratio = (key, value) => {
+      let norm = norms[key], got = value === void 0 ? m.ratios[key] : value;
+      return norm ? got / norm : 1;
+    }, bits = [
+      m.source === "landmarks" ? "detector" : "estimated from colour only",
+      `confidence ${pct}%`,
+      // Against the measurer's own norm, not a fixed number: the two measurers
+      // define "face width" differently, and hard-coded cut points meant a face
+      // measured as slightly broader than average was described as narrow.
+      ratio("aspect") > 1.09 ? "broad head" : ratio("aspect") < 0.92 ? "narrow head" : "ordinary head",
+      `eyes ${ratio("eyeSpacing", m.eyes.spacing) > 1.07 ? "wide-set" : ratio("eyeSpacing", m.eyes.spacing) < 0.93 ? "close-set" : "evenly set"}`,
       m.eyes.aperture < 0.2 ? "narrow" : m.eyes.aperture > 0.5 ? "wide open" : "half open",
       m.brows.strength > 1 ? "heavy brows" : m.brows.strength < 0.3 ? "faint brows" : "ordinary brows",
       m.beard.amount > 0.58 ? "beard" : m.beard.amount > 0.3 ? "stubble" : "clean-shaven",
@@ -5887,7 +6256,7 @@ ${labelOf(KIN, g.kin)} \xB7 ${labelOf(LOOKS, g.look)} \xB7 ${labelOf(PEN_STYLES,
     }), el.addEventListener("pointermove", (e) => {
       if (!dragging || !focused) return;
       let w = el.clientWidth || 400;
-      focused.head.yaw = clamp6(startYaw + (e.clientX - startX) / w * 1.1, -0.5, 0.5), focused.head.tilt = clamp6(startTilt + (e.clientY - startY) / w * 0.7, -0.26, 0.26), drawPortrait({ coarse: !0 }), syncPropFields();
+      focused.head.yaw = clamp7(startYaw + (e.clientX - startX) / w * 1.1, -0.5, 0.5), focused.head.tilt = clamp7(startTilt + (e.clientY - startY) / w * 0.7, -0.26, 0.26), drawPortrait({ coarse: !0 }), syncPropFields();
     });
     let end = () => {
       dragging && (dragging = !1, drawPortrait(), syncGenomeText());

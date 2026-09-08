@@ -14,12 +14,12 @@
  * origin at its centre, so x/y roughly in [-50, 50]. y grows downwards.
  */
 
-import { makeRng } from './rng.js?v=df44e11666';
-import { KIN_WEIGHTS, resolveKin } from './kin.js?v=df44e11666';
-import { LOOK_BLOCKLIST, LOOK_WEIGHTS, resolveLook } from './looks.js?v=df44e11666';
+import { makeRng } from './rng.js?v=e1ff722724';
+import { KIN_WEIGHTS, resolveKin } from './kin.js?v=e1ff722724';
+import { LOOK_BLOCKLIST, LOOK_WEIGHTS, resolveLook } from './looks.js?v=e1ff722724';
 
-export { KIN, KIN_NAMES, KIN_WEIGHTS } from './kin.js?v=df44e11666';
-export { LOOKS, LOOK_NAMES, LOOK_WEIGHTS } from './looks.js?v=df44e11666';
+export { KIN, KIN_NAMES, KIN_WEIGHTS } from './kin.js?v=e1ff722724';
+export { LOOKS, LOOK_NAMES, LOOK_WEIGHTS } from './looks.js?v=e1ff722724';
 
 export const HEAD_SHAPES = [
   'round', 'oval', 'egg', 'square', 'pear', 'long', 'wide', 'diamond',
