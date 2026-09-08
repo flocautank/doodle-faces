@@ -154,6 +154,15 @@ se resserrer, borné par deux prédictions indépendantes.
 
 Quelques leçons payées comptant :
 
+- **Les yeux d'abord, tout le reste ensuite.** Les proportions verticales
+  pendaient au sommet du masque de peau, donc au bon vouloir de la quantité de
+  cheveux qui y entrait — et des cheveux blonds passent le test de peau et
+  tombent dans la même boîte chromatique qu'un front. La fenêtre de recherche
+  glissait alors par-dessus la coiffure et la « ligne des yeux » revenait sur le
+  sourcil. Les yeux sont ce qu'un portrait offre de plus fiable : ils doivent
+  être l'ancre, pas la dernière chose déduite. Et pour distinguer un front d'une
+  mèche blonde, la clarté ne suffit pas — c'est la **texture** qui tranche, une
+  mèche est haute fréquence, un front est lisse.
 - Le filtre qui écarte les cheveux du masque écarte aussi **les yeux, les
   sourcils et la barbe** — il ne faut donc pas chercher les traits sombres *à
   travers* ce masque, mais dans l'étendue des lignes.
@@ -209,7 +218,7 @@ connues par construction, et `npm test` vérifie qu'elles ressortent.
 npm test
 ```
 
-Quarante-trois vérifications : géométrie retrouvée, proportions qui bougent dans
+Cinquante vérifications : géométrie retrouvée, proportions qui bougent dans
 le bon sens, expression lue juste, barbe et lunettes détectées, plus les
 régressions ci-dessus explicitement verrouillées. Un visage synthétique est
 beaucoup plus facile qu'un vrai : réussir ici est un plancher, pas un plafond.

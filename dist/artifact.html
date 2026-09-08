@@ -4715,7 +4715,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
       for (let p = 0; p < w * h; p += 3)
         mask[p] && sample.push(luma(data, p * 4));
       sample.sort((a, b) => a - b);
-      let median = sample[sample.length >> 1] || 128, floor = Math.max(42, median * 0.55);
+      let bright = sample[Math.min(sample.length - 1, Math.floor(sample.length * 0.7))] || 128, floor = Math.max(42, bright * 0.62);
       for (let p = 0; p < w * h; p++)
         mask[p] && luma(data, p * 4) < floor && (mask[p] = 0, skinCount--);
     }
@@ -4750,29 +4750,27 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     let bottom = h - 1;
     for (; bottom > top && rowW[bottom] === 0; ) bottom--;
     if (bottom - top < 14) return { ok: !1, reason: "the face is too small in the frame \u2014 crop closer" };
-    let smoothW = smooth(rowW, Math.max(1, Math.round((bottom - top) * 0.015))), hairline = top, faceH0 = bottom - top, widest = top, faceW = 6;
-    for (let pass = 0; pass < 3; pass++) {
-      let limit = Math.min(bottom, Math.round(top + (pass === 0 ? (bottom - top) * 0.5 : faceH0)));
-      widest = argmax(smoothW, top, limit + 1), faceW = Math.max(6, smoothW[widest]), faceH0 = faceW * 1.11;
-    }
-    let cx = (rowMin[widest] + rowMax[widest]) / 2, bandBottom = Math.min(bottom, Math.round(hairline + faceH0 * 1.05)), band = new Float64Array(h);
-    for (let y = top; y <= bandBottom; y++) {
-      if (rowW[y] < 3) continue;
-      let sum = 0, n = 0, pad = Math.round(rowW[y] * 0.12);
+    let smoothW = smooth(rowW, Math.max(1, Math.round((bottom - top) * 0.015))), rowLuma = (y) => {
+      if (rowW[y] < 3) return 0;
+      let sum = 0, n = 0, pad = Math.round(rowW[y] * 0.15);
       for (let x = rowMin[y] + pad; x <= rowMax[y] - pad; x++)
         sum += luma(data, (y * w + x) * 4), n++;
-      n > 0 && (band[y] = 255 - sum / n);
-    }
-    let dark = smooth(band, Math.max(1, Math.round(faceH0 * 8e-3))), lipBand = new Float64Array(h);
-    for (let y = top; y <= bandBottom; y++) {
-      if (rowW[y] < 3) continue;
-      let sum = 0, n = 0, pad = Math.round(rowW[y] * 0.12);
-      for (let x = rowMin[y] + pad; x <= rowMax[y] - pad; x++)
-        sum += lipness(data, (y * w + x) * 4), n++;
-      n > 0 && (lipBand[y] = sum / n);
-    }
-    let lippy = smooth(lipBand, Math.max(1, Math.round(faceH0 * 8e-3))), eyeY = (() => {
-      let lo = Math.max(1, Math.round(hairline + faceH0 * 0.08)), hi = Math.min(h - 2, Math.round(hairline + faceH0 * 0.6));
+      return n ? sum / n : 0;
+    }, rowRough = (y) => {
+      if (rowW[y] < 5) return 0;
+      let sum = 0, n = 0, pad = Math.round(rowW[y] * 0.15);
+      for (let x = Math.max(1, rowMin[y] + pad); x <= Math.min(w - 2, rowMax[y] - pad); x++)
+        sum += Math.abs(luma(data, (y * w + x + 1) * 4) - luma(data, (y * w + x - 1) * 4)), n++;
+      return n ? sum / n : 0;
+    }, at = (arr, q) => {
+      let sorted = arr.slice().sort((x, y) => x - y);
+      return sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(sorted.length * q)))];
+    }, upper = [], upperCentres = [];
+    for (let y = top; y <= top + (bottom - top) * 0.55; y++)
+      rowW[y] < 5 || (upper.push(rowW[y]), upperCentres.push((rowMin[y] + rowMax[y]) / 2));
+    if (upper.length < 4) return { ok: !1, reason: "the face is too small in the frame \u2014 crop closer" };
+    let roughW = Math.max(8, at(upper, 0.6)), roughCx = at(upperCentres, 0.5), eyeY = (() => {
+      let lo = Math.max(1, Math.round(top + (bottom - top) * 0.04)), hi = Math.min(h - 2, Math.round(top + (bottom - top) * 0.55));
       if (hi <= lo) return lo;
       let down = new Float64Array(w);
       for (let x = 0; x < w; x++) {
@@ -4781,18 +4779,57 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
           inside(x, y) && (sum += 255 - luma(data, (y * w + x) * 4), n++);
         down[x] = n > 3 ? sum / n : 0;
       }
-      let colDown = smooth(down, Math.max(1, Math.round(faceW * 0.02))), xL = argmax(colDown, cx - faceW * 0.44, cx - faceW * 0.06), xR = argmax(colDown, cx + faceW * 0.06, cx + faceW * 0.44), rowAt = (x0) => {
-        let half = Math.max(2, Math.round(faceW * 0.055)), prof = new Float64Array(h);
+      let colDown = smooth(down, Math.max(1, Math.round(roughW * 0.02))), eyeColumn = (a0, b0) => {
+        let a = Math.max(0, Math.round(a0)), b = Math.min(w - 1, Math.round(b0)), floor = 1 / 0;
+        for (let x = a; x <= b; x++) colDown[x] < floor && (floor = colDown[x]);
+        let num = 0, den = 0;
+        for (let x = a; x <= b; x++) {
+          let wgt = Math.max(0, colDown[x] - floor) ** 2;
+          num += wgt * x, den += wgt;
+        }
+        return den > 0 ? Math.round(num / den) : Math.round((a + b) / 2);
+      }, xL = eyeColumn(roughCx - roughW * 0.44, roughCx - roughW * 0.06), xR = eyeColumn(roughCx + roughW * 0.06, roughCx + roughW * 0.44), rowAt = (x0) => {
+        let half = Math.max(2, Math.round(roughW * 0.035)), prof = new Float64Array(h);
         for (let y = lo; y <= hi; y++) {
           let sum = 0, n = 0;
           for (let x = Math.round(x0 - half); x <= Math.round(x0 + half); x++)
-            x < 0 || x >= w || (sum += 255 - luma(data, (y * w + x) * 4), n++);
-          prof[y] = n ? sum / n : 0;
+            inside(x, y) && (sum += 255 - luma(data, (y * w + x) * 4), n++);
+          prof[y] = n > half ? sum / n : 0;
         }
         return argmax(prof, lo, hi + 1);
       };
       return Math.round((rowAt(xL) + rowAt(xR)) / 2);
-    })(), mouthY = (() => {
+    })(), widest = eyeY, faceW = 6;
+    {
+      let limit = Math.min(bottom, Math.round(eyeY + roughW * 0.62));
+      widest = argmax(smoothW, eyeY, limit + 1), faceW = Math.max(6, smoothW[widest]);
+    }
+    let faceH0 = faceW * 1.11, cx = (rowMin[widest] + rowMax[widest]) / 2, hairline = (() => {
+      let fallback = Math.max(top, Math.round(eyeY - faceW * 0.3)), lumas = [], roughs = [];
+      for (let y = eyeY + Math.round(faceW * 0.12); y <= Math.min(bottom, eyeY + Math.round(faceW * 0.7)); y++)
+        rowW[y] < 5 || (lumas.push(rowLuma(y)), roughs.push(rowRough(y)));
+      if (lumas.length < 3) return fallback;
+      let lit = at(lumas, 0.7) * 0.8, smoothEnough = Math.max(4, at(roughs, 0.5) * 2.2), from = Math.max(top, Math.round(eyeY - faceW * 0.62)), to = Math.round(eyeY - faceW * 0.1);
+      for (let y = from; y <= to; y++)
+        if (rowW[y] >= 5 && rowLuma(y) > lit && rowRough(y) < smoothEnough) return y;
+      return fallback;
+    })(), bandBottom = Math.min(bottom, Math.round(eyeY + faceW * 0.95)), band = new Float64Array(h);
+    for (let y = hairline; y <= bandBottom; y++) {
+      if (rowW[y] < 3) continue;
+      let sum = 0, n = 0, pad = Math.round(rowW[y] * 0.12);
+      for (let x = rowMin[y] + pad; x <= rowMax[y] - pad; x++)
+        sum += luma(data, (y * w + x) * 4), n++;
+      n > 0 && (band[y] = 255 - sum / n);
+    }
+    let dark = smooth(band, Math.max(1, Math.round(faceH0 * 8e-3))), lipBand = new Float64Array(h);
+    for (let y = hairline; y <= bandBottom; y++) {
+      if (rowW[y] < 3) continue;
+      let sum = 0, n = 0, pad = Math.round(rowW[y] * 0.12);
+      for (let x = rowMin[y] + pad; x <= rowMax[y] - pad; x++)
+        sum += lipness(data, (y * w + x) * 4), n++;
+      n > 0 && (lipBand[y] = sum / n);
+    }
+    let lippy = smooth(lipBand, Math.max(1, Math.round(faceH0 * 8e-3))), mouthY = (() => {
       let lo = Math.max(eyeY + 2, Math.round(eyeY + faceW * 0.2)), hi = Math.min(bandBottom, Math.round(eyeY + faceW * 0.9));
       if (hi <= lo) return Math.min(bandBottom, Math.round(eyeY + faceW * 0.455));
       let expect = eyeY + faceW * 0.455, sigma = faceW * 0.13, floor = 1 / 0;
@@ -4803,7 +4840,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
         v > bestV && (bestV = v, best = y);
       }
       return best;
-    })(), eyeToMouth = Math.max(5, mouthY - eyeY), headH = eyeToMouth / 0.3, crownY = eyeY - headH * 0.46, chin = (() => {
+    })(), eyeToMouth = Math.max(5, mouthY - eyeY), headH = eyeToMouth / 0.3, crownY = eyeY - headH * 0.46, noseY = argmax(dark, eyeY + eyeToMouth * 0.3, mouthY - eyeToMouth * 0.18), chin = (() => {
       let lo = Math.max(top + 2, Math.round(mouthY + headH * 0.1), Math.round(hairline + faceH0 * 0.85)), hi = Math.min(h - 2, Math.round(mouthY + headH * 0.36), Math.round(hairline + faceH0 * 1.25));
       if (hi <= lo) return Math.min(h - 1, Math.round(mouthY + headH * 0.24));
       let best = Math.round(mouthY + headH * 0.24), bestCurv = -1 / 0;
@@ -4816,7 +4853,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
         curv > bestCurv && (bestCurv = curv, best = y);
       }
       return best;
-    })(), faceH = Math.max(8, chin - hairline), noseY = argmax(dark, eyeY + eyeToMouth * 0.3, mouthY - eyeToMouth * 0.18), eyeBand = Math.max(2, Math.round(headH * 0.045)), cols = new Float64Array(w);
+    })(), faceH = Math.max(8, chin - hairline), eyeBand = Math.max(2, Math.round(headH * 0.045)), cols = new Float64Array(w);
     for (let x = 0; x < w; x++) {
       let sum = 0, n = 0;
       for (let y = eyeY - eyeBand; y <= eyeY + eyeBand; y++)
@@ -4909,8 +4946,8 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
           inside(x, y) && (sum += 255 - luma(data, (y * w + x) * 4), n++);
         ncols[x] = n > 1 ? sum / n : 0;
       }
-      let nD = smooth(ncols, Math.max(1, Math.round(faceW * 0.012))), at = argmax(nD, cx - faceW * 0.2, cx + faceW * 0.2);
-      return runWidth(nD, at, nD[at] * 0.7);
+      let nD = smooth(ncols, Math.max(1, Math.round(faceW * 0.012))), at2 = argmax(nD, cx - faceW * 0.2, cx + faceW * 0.2);
+      return runWidth(nD, at2, nD[at2] * 0.7);
     })(), glasses = (() => {
       let bridgeX = Math.round((eyeL + eyeR) / 2), bridge = 0, n = 0;
       for (let y = eyeY - eyeBand; y <= eyeY + eyeBand; y++)

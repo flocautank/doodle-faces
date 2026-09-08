@@ -148,6 +148,37 @@ console.log('\nthings that are either there or not');
   check('a smooth tall crown is read as headwear', read.hat !== null, `got ${read.hat}`);
 }
 
+console.log('\nthe measurement holds still when it should');
+{
+  // Every vertical proportion used to hang off the top of the skin mask, which
+  // put them at the mercy of how much hair got into it. Pale hair passes the
+  // skin test and sits in the same chroma box as a forehead, so it joins the
+  // mask and slides the whole search window up over the hairstyle. Both sweeps
+  // below moved the eye line by tens of pixels before the eyes became the
+  // anchor that everything else hangs off.
+  const spread = (list, f) => Math.max(...list.map(f)) - Math.min(...list.map(f));
+
+  const rows = [2, 24, 46, 78, 96].map(
+    (hairTop) => measure({ hairTop, beard: 0.9, glasses: true, mouthCurve: 0.9 }).m);
+  check('hair volume does not move the eye line', spread(rows, (m) => m.eyes.y) <= 3,
+    rows.map((m) => m.eyes.y).join(','));
+  check('hair volume does not move the head scale',
+    spread(rows, (m) => m.head.headH) / rows[0].head.headH < 0.05);
+  check('but it is still measured',
+    rows[0].hair.volume < 0.2 && rows[rows.length - 1].hair.volume > 1,
+    `${rows[0].hair.volume.toFixed(2)} .. ${rows[rows.length - 1].hair.volume.toFixed(2)}`);
+
+  const tones = [[58, 44, 34], [120, 96, 72], [186, 158, 116], [224, 206, 168]]
+    .map((hairRgb) => measure({ hairRgb, hairTop: 46 }).m);
+  check('hair colour does not move the eye line', spread(tones, (m) => m.eyes.y) <= 3,
+    tones.map((m) => m.eyes.y).join(','));
+  check('hair colour does not move the head scale',
+    spread(tones, (m) => m.head.headH) / tones[0].head.headH < 0.05);
+  check('blond hair is still found', tones[3].hair.volume > 0.5, `got ${tones[3].hair.volume.toFixed(2)}`);
+  check('and its tone is read', tones[3].hair.luma > tones[0].hair.luma + 80,
+    `${tones[3].hair.luma.toFixed(0)} vs ${tones[0].hair.luma.toFixed(0)}`);
+}
+
 console.log('\nthe fit produces a usable genome');
 {
   const { m } = measure({ beard: 0.8, glasses: true, mouthCurve: 0.8 });

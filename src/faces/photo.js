@@ -236,8 +236,15 @@ export function measureFace(img) {
       if (mask[p]) sample.push(luma(data, p * 4));
     }
     sample.sort((a, b) => a - b);
-    const median = sample[sample.length >> 1] || 128;
-    const floor = Math.max(42, median * 0.55);
+    // The reference is a high percentile, not the median. Light brown and
+    // blond hair pass the skin test too, and when enough of it does, it drags
+    // the median down far enough for the rest to survive the filter — at which
+    // point the mask includes the whole head of hair and the "top of the face"
+    // is the top of somebody's hairstyle. A face is the brightest large thing
+    // in a portrait, so a percentile up in the face's own range holds still
+    // however much hair leaks in.
+    const bright = sample[Math.min(sample.length - 1, Math.floor(sample.length * 0.7))] || 128;
+    const floor = Math.max(42, bright * 0.62);
     for (let p = 0; p < w * h; p++) {
       if (mask[p] && luma(data, p * 4) < floor) {
         mask[p] = 0;
@@ -331,61 +338,66 @@ export function measureFace(img) {
    * own width from hairline to chin, so measure the width, predict the height
    * from it, then re-measure the width within that height. Two passes settle.
    */
-  const hairline = top;
-  let faceH0 = bottom - top;
-  let widest = top;
-  let faceW = 6;
-  for (let pass = 0; pass < 3; pass++) {
-    const limit = Math.min(bottom, Math.round(top + (pass === 0 ? (bottom - top) * 0.5 : faceH0)));
-    widest = argmax(smoothW, top, limit + 1);
-    faceW = Math.max(6, smoothW[widest]);
-    faceH0 = faceW * 1.11;
-  }
-  const cx = (rowMin[widest] + rowMax[widest]) / 2;
-
-  // ------------------------------------------------------ feature bands ---
-  // Darkness averaged across the blob, row by row. Eyes, brows, nostrils and
-  // the mouth line are all places where a face gets darker across its width.
-  const bandBottom = Math.min(bottom, Math.round(hairline + faceH0 * 1.05));
-  const band = new Float64Array(h);
-  for (let y = top; y <= bandBottom; y++) {
-    if (rowW[y] < 3) continue;
+  /** Mean luma across a row's interior. */
+  const rowLuma = (y) => {
+    if (rowW[y] < 3) return 0;
     let sum = 0;
     let n = 0;
-    // Skip the outer eighth: the silhouette edge is dark on every row and
-    // would drown the signal we are after.
-    const pad = Math.round(rowW[y] * 0.12);
+    const pad = Math.round(rowW[y] * 0.15);
     for (let x = rowMin[y] + pad; x <= rowMax[y] - pad; x++) {
       sum += luma(data, (y * w + x) * 4);
       n++;
     }
-    if (n > 0) band[y] = 255 - sum / n;
-  }
-  // Barely smoothed, and for a specific reason: the band splitter below
-  // separates brows from eyes by the lit skin between them, and a kernel wide
-  // enough to bridge that gap merges the two into one band whose centre is
-  // neither. The features themselves are eight pixels and up, so a radius of
-  // one or two is all the noise suppression needed.
-  const dark = smooth(band, Math.max(1, Math.round(faceH0 * 0.008)));
+    return n ? sum / n : 0;
+  };
 
-  // The same row scan again, on the lip channel. Cheap, and it is what the
-  // mouth is found with.
-  const lipBand = new Float64Array(h);
-  for (let y = top; y <= bandBottom; y++) {
-    if (rowW[y] < 3) continue;
+  /** Mean horizontal gradient across a row's interior — how rough it is. */
+  const rowRough = (y) => {
+    if (rowW[y] < 5) return 0;
     let sum = 0;
     let n = 0;
-    const pad = Math.round(rowW[y] * 0.12);
-    for (let x = rowMin[y] + pad; x <= rowMax[y] - pad; x++) {
-      sum += lipness(data, (y * w + x) * 4);
+    const pad = Math.round(rowW[y] * 0.15);
+    for (let x = Math.max(1, rowMin[y] + pad); x <= Math.min(w - 2, rowMax[y] - pad); x++) {
+      sum += Math.abs(luma(data, (y * w + x + 1) * 4) - luma(data, (y * w + x - 1) * 4));
       n++;
     }
-    if (n > 0) lipBand[y] = sum / n;
-  }
-  const lippy = smooth(lipBand, Math.max(1, Math.round(faceH0 * 0.008)));
+    return n ? sum / n : 0;
+  };
+
+  const at = (arr, q) => {
+    const sorted = arr.slice().sort((x, y) => x - y);
+    return sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(sorted.length * q)))];
+  };
 
   /**
-   * The eye line.
+   * A rough scale, from the blob alone.
+   *
+   * Only used to size the search windows below, so it can afford to be a little
+   * wrong — which it will be, because pale hair inside the mask makes the top
+   * of the blob wider than the face.
+   */
+  const upper = [];
+  const upperCentres = [];
+  for (let y = top; y <= top + (bottom - top) * 0.55; y++) {
+    if (rowW[y] < 5) continue;
+    upper.push(rowW[y]);
+    upperCentres.push((rowMin[y] + rowMax[y]) / 2);
+  }
+  if (upper.length < 4) return { ok: false, reason: 'the face is too small in the frame — crop closer' };
+  const roughW = Math.max(8, at(upper, 0.6));
+  const roughCx = at(upperCentres, 0.5);
+
+  /**
+   * The eye line — found first, and with no vertical prior at all.
+   *
+   * This used to be searched inside a window hung off the top of the mask, and
+   * that made every proportion hostage to where the mask started. Blond hair
+   * passes the skin test and lands in the same chroma box as a forehead, so it
+   * joins the mask, and then the search window slides up over the hairstyle and
+   * the eye line comes back as the brow, or worse. Finding the eyes first and
+   * hanging everything else off *them* removes that whole class of failure: the
+   * eyes are the most reliable thing in a portrait, so they should be the
+   * anchor rather than the last thing derived.
    *
    * Three things in the upper face are dark bands, and picking the darkest row
    * gets the wrong one about half the time. Brows are solid bars and often
@@ -393,25 +405,20 @@ export function measureFace(img) {
    * A spectacle rim is dark across the whole width of its lens, so its row
    * out-darkens the eye's however pale the frame is — pick by row darkness and
    * the eye line lands a dozen pixels low on the bottom rim, compressing every
-   * proportion measured afterwards by a fifth.
-   *
-   * Classifying the bands by how far they spread sideways was the second
-   * attempt and also failed: a frame's vertical edges and its bridge fall in
-   * the same rows as the eyes, which pushed the eye band's spread up to a
-   * rim's.
+   * proportion measured afterwards by a fifth. Classifying bands by how far
+   * they spread sideways failed too: a frame's vertical edges and its bridge
+   * fall in the same rows as the eyes.
    *
    * So work the other way round. Find the two *columns* the eyes are in — down
    * a whole column an eye socket accumulates more darkness than a lens centre
-   * does — and only then ask which row is darkest there. At an eye's own column
-   * the eye beats both the brow above it and the thin rim below, because it is
-   * the darkest thing on a face and several times taller than a frame.
-   *
-   * The window is wide on purpose. Predicting height from width assumes an
-   * ordinary face, and the point of all this is to measure faces that are not.
+   * or a strand of hair does — and only then ask which row is darkest there. At
+   * an eye's own column the eye beats both the brow above it and the thin rim
+   * below, because it is the darkest thing on a face and several times taller
+   * than a frame.
    */
   const eyeY = (() => {
-    const lo = Math.max(1, Math.round(hairline + faceH0 * 0.08));
-    const hi = Math.min(h - 2, Math.round(hairline + faceH0 * 0.6));
+    const lo = Math.max(1, Math.round(top + (bottom - top) * 0.04));
+    const hi = Math.min(h - 2, Math.round(top + (bottom - top) * 0.55));
     if (hi <= lo) return lo;
 
     const down = new Float64Array(w);
@@ -425,29 +432,142 @@ export function measureFace(img) {
       }
       down[x] = n > 3 ? sum / n : 0;
     }
-    const colDown = smooth(down, Math.max(1, Math.round(faceW * 0.02)));
-    const xL = argmax(colDown, cx - faceW * 0.44, cx - faceW * 0.06);
-    const xR = argmax(colDown, cx + faceW * 0.06, cx + faceW * 0.44);
+    const colDown = smooth(down, Math.max(1, Math.round(roughW * 0.02)));
 
-    /** Darkest row within the window, averaged over a column's width. */
+    /**
+     * Centre of the dark mass on one side, not its darkest column.
+     *
+     * An argmax here was landing a few pixels off the eye, and a few pixels is
+     * all it takes: a brow is a broad even bar while an eye is an ellipse that
+     * tapers, so just off the eye's centre the brow wins the row search and the
+     * eye line jumps up to it. Which of the two the whole measurement chose
+     * turned on a single pixel of column. A centroid sits on the middle of the
+     * eye, where the eye is at its tallest and darkest, and the question stops
+     * being close.
+     */
+    const eyeColumn = (a0, b0) => {
+      const a = Math.max(0, Math.round(a0));
+      const b = Math.min(w - 1, Math.round(b0));
+      let floor = Infinity;
+      for (let x = a; x <= b; x++) if (colDown[x] < floor) floor = colDown[x];
+      let num = 0;
+      let den = 0;
+      for (let x = a; x <= b; x++) {
+        const wgt = Math.max(0, colDown[x] - floor) ** 2;
+        num += wgt * x;
+        den += wgt;
+      }
+      return den > 0 ? Math.round(num / den) : Math.round((a + b) / 2);
+    };
+    const xL = eyeColumn(roughCx - roughW * 0.44, roughCx - roughW * 0.06);
+    const xR = eyeColumn(roughCx + roughW * 0.06, roughCx + roughW * 0.44);
+
+    /** Darkest row within the window, averaged over a narrow column. */
     const rowAt = (x0) => {
-      const half = Math.max(2, Math.round(faceW * 0.055));
+      // Narrow: an eye is about a tenth of a face wide, and a window wider
+      // than that averages in the skin beside it.
+      const half = Math.max(2, Math.round(roughW * 0.035));
       const prof = new Float64Array(h);
       for (let y = lo; y <= hi; y++) {
         let sum = 0;
         let n = 0;
         for (let x = Math.round(x0 - half); x <= Math.round(x0 + half); x++) {
-          if (x < 0 || x >= w) continue;
+          // Inside the silhouette only. Near the top of the head the face is
+          // still narrow, so a fixed-width column average reaches out past the
+          // temple into the hair beside it — which is dark, and duly won.
+          if (!inside(x, y)) continue;
           sum += 255 - luma(data, (y * w + x) * 4);
           n++;
         }
-        prof[y] = n ? sum / n : 0;
+        prof[y] = n > half ? sum / n : 0;
       }
       return argmax(prof, lo, hi + 1);
     };
 
     return Math.round((rowAt(xL) + rowAt(xR)) / 2);
   })();
+
+  /**
+   * Face width, measured at and below the eye line.
+   *
+   * Never above it: that is where the hair is, and hair the mask accepted would
+   * make the face as wide as the hairstyle.
+   */
+  let widest = eyeY;
+  let faceW = 6;
+  {
+    const limit = Math.min(bottom, Math.round(eyeY + roughW * 0.62));
+    widest = argmax(smoothW, eyeY, limit + 1);
+    faceW = Math.max(6, smoothW[widest]);
+  }
+  const faceH0 = faceW * 1.11;
+  const cx = (rowMin[widest] + rowMax[widest]) / 2;
+
+  /**
+   * The hairline: the topmost row that is both lit and smooth.
+   *
+   * Brightness alone does not settle it — blond hair is genuinely as bright as
+   * a forehead, which is why it got into the mask. Texture does: strands are
+   * high-frequency and a forehead is smooth, and taking the smoothness
+   * reference from the sitter's own cheeks makes it hold across film grain and
+   * lighting. Searched relative to the eye line, so a mask full of hair cannot
+   * move the window.
+   */
+  const hairline = (() => {
+    const fallback = Math.max(top, Math.round(eyeY - faceW * 0.3));
+    const lumas = [];
+    const roughs = [];
+    for (let y = eyeY + Math.round(faceW * 0.12); y <= Math.min(bottom, eyeY + Math.round(faceW * 0.7)); y++) {
+      if (rowW[y] < 5) continue;
+      lumas.push(rowLuma(y));
+      roughs.push(rowRough(y));
+    }
+    if (lumas.length < 3) return fallback;
+    const lit = at(lumas, 0.7) * 0.8;
+    const smoothEnough = Math.max(4, at(roughs, 0.5) * 2.2);
+    const from = Math.max(top, Math.round(eyeY - faceW * 0.62));
+    const to = Math.round(eyeY - faceW * 0.1);
+    for (let y = from; y <= to; y++) {
+      if (rowW[y] >= 5 && rowLuma(y) > lit && rowRough(y) < smoothEnough) return y;
+    }
+    return fallback;
+  })();
+
+  // ------------------------------------------------------ feature bands ---
+  // Darkness averaged across the blob, row by row. The brows, the nostrils and
+  // the mouth are all places where a face gets darker across its width.
+  const bandBottom = Math.min(bottom, Math.round(eyeY + faceW * 0.95));
+  const band = new Float64Array(h);
+  for (let y = hairline; y <= bandBottom; y++) {
+    if (rowW[y] < 3) continue;
+    let sum = 0;
+    let n = 0;
+    // Skip the outer eighth: the silhouette edge is dark on every row and
+    // would drown the signal we are after.
+    const pad = Math.round(rowW[y] * 0.12);
+    for (let x = rowMin[y] + pad; x <= rowMax[y] - pad; x++) {
+      sum += luma(data, (y * w + x) * 4);
+      n++;
+    }
+    if (n > 0) band[y] = 255 - sum / n;
+  }
+  const dark = smooth(band, Math.max(1, Math.round(faceH0 * 0.008)));
+
+  // The same row scan again, on the lip channel. Cheap, and it is what the
+  // mouth is found with.
+  const lipBand = new Float64Array(h);
+  for (let y = hairline; y <= bandBottom; y++) {
+    if (rowW[y] < 3) continue;
+    let sum = 0;
+    let n = 0;
+    const pad = Math.round(rowW[y] * 0.12);
+    for (let x = rowMin[y] + pad; x <= rowMax[y] - pad; x++) {
+      sum += lipness(data, (y * w + x) * 4);
+      n++;
+    }
+    if (n > 0) lipBand[y] = sum / n;
+  }
+  const lippy = smooth(lipBand, Math.max(1, Math.round(faceH0 * 0.008)));
 
   /**
    * The mouth line: the reddest band, discounted by how far it is from where a
@@ -495,21 +615,20 @@ export function measureFace(img) {
   const headH = eyeToMouth / 0.3;
   const crownY = eyeY - headH * 0.46;
 
+  const noseY = argmax(dark, eyeY + eyeToMouth * 0.3, mouthY - eyeToMouth * 0.18);
+
   /**
    * The chin: the corner where the jaw stops narrowing.
    *
    * Two shapes have to work. With shoulders in frame the silhouette widens
    * again below the jaw; with a bare neck it simply stops narrowing. Both are
    * the same event in the second derivative of the width profile, so take the
-   * most convex row — bracketed by where the eye/mouth ruler says a chin can
-   * possibly be, which is what stops a shoulder from being nominated.
+   * most convex row — bracketed from both directions. The mouth line is the
+   * more precise anchor but a dark beard can drag it downwards, and then a
+   * mouth-only bracket reaches past the jaw and nominates the bottom of the
+   * neck; the width prediction is coarse but cannot drift that way.
    */
   const chin = (() => {
-    // Bracket it from both directions. The mouth line is the more precise
-    // anchor but a dark beard can drag it downwards, and then a mouth-only
-    // bracket reaches past the jaw and nominates the bottom of the neck. The
-    // hairline and the width prediction are coarse but cannot drift that way,
-    // so the intersection of the two is narrower than either.
     const lo = Math.max(top + 2, Math.round(mouthY + headH * 0.1), Math.round(hairline + faceH0 * 0.85));
     const hi = Math.min(h - 2, Math.round(mouthY + headH * 0.36), Math.round(hairline + faceH0 * 1.25));
     if (hi <= lo) return Math.min(h - 1, Math.round(mouthY + headH * 0.24));
@@ -534,8 +653,6 @@ export function measureFace(img) {
   })();
 
   const faceH = Math.max(8, chin - hairline);
-
-  const noseY = argmax(dark, eyeY + eyeToMouth * 0.3, mouthY - eyeToMouth * 0.18);
 
   // ------------------------------------------------------------- eyes ----
   // Column darkness inside a band around the eye line, then the strongest
