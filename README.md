@@ -4,6 +4,8 @@ Générateur procédural de visages au stylo, dans l'esprit du post de
 [@mannay](https://x.com/mannay/status/2087522034351796728) — encre tremblée sur
 papier vieilli, une planche de têtes toutes différentes.
 
+**En ligne : <https://flocautank.github.io/doodle-faces/>**
+
 Une graine → toujours le même visage. Sur n'importe quelle machine, pour
 toujours. **Tu stockes la graine, pas l'image.**
 
@@ -32,6 +34,19 @@ Puis <http://localhost:5180>.
 
 ## Héberger
 
+Déjà fait : le dépôt est publié par **GitHub Pages** depuis `main`, à la racine.
+Un `git push` suffit à redéployer — la reconstruction prend une petite minute.
+
+```bash
+git push origin main
+gh api repos/flocautank/doodle-faces/pages/builds/latest --jq .status   # built ?
+```
+
+GitHub Pages met les fichiers en cache une dizaine de minutes ; un visiteur déjà
+venu peut donc voir l'ancienne CSS un moment après un déploiement.
+
+### Ailleurs
+
 Le site est entièrement statique — aucune étape de build, rien à compiler.
 Pousse le dossier tel quel :
 
@@ -42,6 +57,23 @@ Pousse le dossier tel quel :
 
 Le seul point d'attention : servir les `.js` avec le type MIME
 `text/javascript`, ce que fait tout serveur correct par défaut.
+
+### En un seul fichier
+
+Les modules ES sont agréables à travailler mais exigent un serveur. Pour un
+hébergeur qui ne prend qu'un fichier — ou pour ouvrir la page directement depuis
+le disque :
+
+```bash
+node tools/build-single.mjs
+```
+
+Produit `dist/doodle-single.html` (page complète, ~220 kB, s'ouvre en
+`file://`) et `dist/artifact.html` (contenu du `body` seul, pour les hôtes qui
+fournissent l'enveloppe). esbuild aplatit le graphe de modules — c'est aussi lui
+qui renomme les quelques `clamp` privés qui entreraient en collision une fois
+concaténés. C'est un outil de développement : le site produit, lui, n'a toujours
+aucune dépendance.
 
 ---
 
@@ -63,6 +95,38 @@ génome en curseurs, et **Genome** le JSON complet, éditable.
 
 Les libellés de l'interface sont en anglais, comme le code. Cette documentation
 reste en français — dis-le si tu la veux en anglais aussi.
+
+### Garder, partager, comparer, croiser
+
+- **Kept** — le bandeau du bas garde les visages retenus dans `localStorage`
+  (`k` en mode focus, ou l'étoile). Tout accès au stockage est protégé : une
+  fenêtre privée ou un navigateur qui bloque les données de site ne casse rien,
+  la sélection vit juste le temps de la session.
+- **Copy share link** — un lien vers exactement ce qui est à l'écran. Un visage
+  intact est entièrement décrit par sa graine et les réglages, donc le lien
+  reste court ; dès qu'un génome a été retouché à la main il n'y a plus rien
+  pour le dériver, alors il part en entier dans le fragment (~2,5 ko en
+  base64url). Le panneau *Genome* affiche exactement ce que le lien encode, à
+  l'arrondi près — vérifié : aller-retour identique au caractère.
+- **Compare** — deux portraits côte à côte, chacun avec son propre pas dans la
+  planche, plus *Swap* et *Breed A × B* qui envoie l'enfant en mode focus.
+
+### L'expression
+
+Un seul curseur, de −1 (aigre) à +1 (ravi). Ce n'est **pas un trait** : c'est
+une lentille que le renderer applique par-dessus les sourcils, les yeux et la
+bouche déjà tirés au sort, pour qu'un personnage puisse changer d'humeur sans
+devenir quelqu'un d'autre. `mood` fait la même chose pour toute une population.
+
+Au-delà d'un seuil le style de bouche est **substitué** — on ne sourit pas avec
+une moue — mais tout le reste est continu : les sourcils montent et pivotent,
+les paupières se plissent, une paupière lourde tombe sur les yeux d'un visage
+qui en a assez.
+
+Un détail sans lequel ça ne se lisait pas : la plupart des bouches n'ont aucune
+courbe à fléchir, et beaucoup de visages n'ont pas de sourcils du tout. D'où un
+signal universel — **deux petits traits aux coins de la bouche**, qui la
+retroussent ou l'abaissent quel que soit son style.
 
 ### Les performances
 
@@ -102,6 +166,8 @@ src/faces/
   presets.js      les populations : carnet, humains, foule, enfants, joueurs, taverne, carnaval
   recipes.js      les portraits épinglés : un personnage précis, pas une population
   breed.js        croisement de deux génomes : des frères et sœurs, une famille
+tools/
+  build-single.mjs  tout aplatir en un fichier HTML autonome
   anatomy.js      le génome → géométrie concrète dans une boîte de 100 unités
   ink.js          les primitives "stylo à main levée" + la texture papier
   color.js        la couche couleur : lavis mats, hors repérage
@@ -337,6 +403,7 @@ drawFace(ctx, 'pnj-42', { size: 256, x: 0, y: 0 });
 | `force`   | `{}`         | traits imposés, ex. `{ hat: 'beanie', beard: 'none' }` |
 | `color`   | `1`          | fréquence des touches de couleur ; `0` = encre seule |
 | `turn`    | `1`          | fréquence des têtes tournées ; `0` = toutes de face |
+| `mood`    | `0`          | −1..1, humeur moyenne de la population |
 | `kin`     | défauts      | pondération des espèces, ex. `{ orc: 50, human: 50 }` |
 | `look`    | défauts      | pondération des archétypes |
 | `accents` | `true`       | `false` pour ne pas peindre la couche couleur d'un génome |
