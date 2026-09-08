@@ -347,6 +347,41 @@ body[data-mode="compare"] .sheet-only { display: none !important; }
 }
 .nav:hover { background: #fff; }
 
+/* ---------------------------------------------------------------- photo -- */
+
+.note.keep {
+  border-left: 2px solid var(--accent);
+  padding-left: 8px;
+}
+
+.drop-zone {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+  transition: border-color .12s, background .12s;
+}
+.drop-zone.is-over {
+  border-color: var(--accent);
+  background: rgba(0, 0, 0, .03);
+}
+.drop-zone .hint {
+  margin: 6px 0 0;
+  font-size: .68rem;
+  color: var(--ink-soft);
+}
+
+.photo-preview {
+  margin: 8px 0;
+  line-height: 0;
+  text-align: center;
+}
+.photo-preview canvas {
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
 /* -------------------------------------------------------------- compare -- */
 
 .compare {
@@ -489,6 +524,38 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
           override it.
         </p>
       </section>
+
+      <details class="grp">
+        <summary>From a photo</summary>
+        <p class="note">
+          Drop in a portrait and the generator measures it — skull proportions,
+          where the eyes sit and how far apart, brow weight, mouth width and
+          curve, hair volume, beard, glasses — then draws the nearest face it
+          can. It stays a doodle: it is a likeness, not a portrait.
+        </p>
+        <p class="note keep">
+          <b>The photo never leaves this tab.</b> There is nothing to upload it
+          to — this is a static site, and the measuring runs in your browser.
+          Nothing is written to disk, nothing is kept between visits, and
+          <b>Forget</b> or a reload drops it. The share link carries the
+          resulting numbers, never the picture.
+        </p>
+        <div id="drop" class="drop-zone">
+          <input id="photoFile" type="file" accept="image/*" hidden>
+          <button id="photoPick" class="ghost wide" type="button">Choose a photo…</button>
+          <p class="hint">or drop one here</p>
+        </div>
+        <div id="photoResult" hidden>
+          <div id="photoPreview" class="photo-preview"></div>
+          <p id="photoRead" class="note"></p>
+          <div class="btn-col">
+            <button id="photoMatch" class="primary" type="button">Draw this face</button>
+            <button id="photoAgain" class="ghost" type="button">↻ Another take</button>
+            <button id="photoForget" class="ghost" type="button">✕ Forget the photo</button>
+          </div>
+        </div>
+        <p id="photoError" class="err" hidden></p>
+      </details>
 
       <details class="grp" open>
         <summary>Traits</summary>
@@ -4562,8 +4629,722 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
     return Array.from({ length: count }, (_, i) => `${rootSeed}#${i}`);
   }
 
+  // src/faces/photo.js
+  function luma(d, i) {
+    return 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+  }
+  function lipness(d, i) {
+    let y = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    return (2 * d[i] - d[i + 1] - d[i + 2]) / Math.max(40, y);
+  }
+  function clamp4(v, lo, hi) {
+    return v < lo ? lo : v > hi ? hi : v;
+  }
+  function isSkin(r, g, b) {
+    let y = 0.299 * r + 0.587 * g + 0.114 * b;
+    if (y < 38 || y > 250) return !1;
+    let cb = -0.169 * r - 0.331 * g + 0.5 * b + 128, cr = 0.5 * r - 0.419 * g - 0.081 * b + 128, chroma = cr >= 132 && cr <= 182 && cb >= 74 && cb <= 130, mx = Math.max(r, g, b), mn = Math.min(r, g, b), rgb = r > 92 && g > 38 && b > 18 && mx - mn > 14 && r - g > 12 && r > b;
+    return chroma || rgb;
+  }
+  function smooth(arr, radius) {
+    let cur = arr;
+    for (let pass = 0; pass < 2; pass++) {
+      let out = new Float64Array(cur.length);
+      for (let i = 0; i < cur.length; i++) {
+        let sum = 0, n = 0;
+        for (let k = -radius; k <= radius; k++) {
+          let j = i + k;
+          j < 0 || j >= cur.length || (sum += cur[j], n++);
+        }
+        out[i] = sum / n;
+      }
+      cur = out;
+    }
+    return cur;
+  }
+  function argmax(arr, lo, hi) {
+    let a = Math.max(0, Math.round(lo)), b = Math.min(arr.length, Math.round(hi)), best = a, bestV = -1 / 0;
+    for (let i = a; i < b; i++)
+      arr[i] > bestV && (bestV = arr[i], best = i);
+    return best;
+  }
+  function runWidth(profile, at, floor) {
+    let a = at, b = at;
+    for (; a > 0 && profile[a - 1] > floor; ) a--;
+    for (; b < profile.length - 1 && profile[b + 1] > floor; ) b++;
+    return b - a + 1;
+  }
+  function faceRegion(mask, w, h) {
+    let seen = new Uint8Array(mask.length), stack = new Int32Array(mask.length), comps = [];
+    for (let start = 0; start < mask.length; start++) {
+      if (!mask[start] || seen[start]) continue;
+      let top = 0;
+      stack[top++] = start, seen[start] = 1;
+      let cells = [], x0 = w, x1 = -1, y0 = h, y1 = -1;
+      for (; top > 0; ) {
+        let p = stack[--top];
+        cells.push(p);
+        let x = p % w, y = (p - x) / w;
+        x < x0 && (x0 = x), x > x1 && (x1 = x), y < y0 && (y0 = y), y > y1 && (y1 = y), x > 0 && mask[p - 1] && !seen[p - 1] && (seen[p - 1] = 1, stack[top++] = p - 1), x < w - 1 && mask[p + 1] && !seen[p + 1] && (seen[p + 1] = 1, stack[top++] = p + 1), y > 0 && mask[p - w] && !seen[p - w] && (seen[p - w] = 1, stack[top++] = p - w), y < h - 1 && mask[p + w] && !seen[p + w] && (seen[p + w] = 1, stack[top++] = p + w);
+      }
+      comps.push({ cells, x0, x1, y0, y1, used: !1 });
+    }
+    if (comps.length === 0) return null;
+    comps.sort((p, q) => q.cells.length - p.cells.length);
+    let face = comps[0];
+    face.used = !0;
+    let box = { x0: face.x0, x1: face.x1, y0: face.y0, y1: face.y1 }, out = face.cells, changed = !0;
+    for (; changed; ) {
+      changed = !1;
+      for (let c of comps) {
+        if (c.used) continue;
+        let overlap = Math.min(box.x1, c.x1) - Math.max(box.x0, c.x0) + 1, narrower = Math.min(box.x1 - box.x0, c.x1 - c.x0) + 1, gap = c.y0 > box.y1 ? c.y0 - box.y1 : box.y0 > c.y1 ? box.y0 - c.y1 : 0;
+        overlap < narrower * 0.4 || gap > (box.y1 - box.y0 + 1) * 0.3 || (c.used = !0, out = out.concat(c.cells), box.x0 = Math.min(box.x0, c.x0), box.x1 = Math.max(box.x1, c.x1), box.y0 = Math.min(box.y0, c.y0), box.y1 = Math.max(box.y1, c.y1), changed = !0);
+      }
+    }
+    return out;
+  }
+  function measureFace(img) {
+    let { width: w, height: h, data } = img;
+    if (!w || !h) return { ok: !1, reason: "empty image" };
+    let notes = [], mask = new Uint8Array(w * h), skinCount = 0;
+    for (let i = 0, p = 0; p < w * h; p++, i += 4)
+      isSkin(data[i], data[i + 1], data[i + 2]) && (mask[p] = 1, skinCount++);
+    if (skinCount > 40) {
+      let sample = [];
+      for (let p = 0; p < w * h; p += 3)
+        mask[p] && sample.push(luma(data, p * 4));
+      sample.sort((a, b) => a - b);
+      let median = sample[sample.length >> 1] || 128, floor = Math.max(42, median * 0.55);
+      for (let p = 0; p < w * h; p++)
+        mask[p] && luma(data, p * 4) < floor && (mask[p] = 0, skinCount--);
+    }
+    let skinFrac = skinCount / (w * h);
+    if (skinFrac < 0.012) return { ok: !1, reason: "no face found \u2014 try a brighter, closer photo" };
+    if (skinFrac > 0.86) return { ok: !1, reason: "the whole frame reads as skin \u2014 try a plainer background" };
+    let blob = faceRegion(mask, w, h);
+    if (!blob || blob.length < 8e-3 * w * h)
+      return { ok: !1, reason: "no face found \u2014 try a brighter, closer photo" };
+    let face = new Uint8Array(w * h);
+    for (let p of blob) face[p] = 1;
+    let rowMin = new Int32Array(h).fill(-1), rowMax = new Int32Array(h).fill(-1), rowW = new Float64Array(h);
+    for (let p of blob) {
+      let x = p % w, y = (p - x) / w;
+      (rowMin[y] < 0 || x < rowMin[y]) && (rowMin[y] = x), x > rowMax[y] && (rowMax[y] = x);
+    }
+    for (let y = 0; y < h; y++) rowW[y] = rowMin[y] < 0 ? 0 : rowMax[y] - rowMin[y] + 1;
+    {
+      let prev = -1;
+      for (let y = 0; y < h; y++)
+        if (!(rowW[y] <= 0)) {
+          if (prev >= 0 && y - prev > 1)
+            for (let k = prev + 1; k < y; k++) {
+              let t = (k - prev) / (y - prev);
+              rowMin[k] = Math.round(rowMin[prev] + (rowMin[y] - rowMin[prev]) * t), rowMax[k] = Math.round(rowMax[prev] + (rowMax[y] - rowMax[prev]) * t), rowW[k] = rowMax[k] - rowMin[k] + 1;
+            }
+          prev = y;
+        }
+    }
+    let inside = (x, y) => y >= 0 && y < h && rowMin[y] >= 0 && x >= rowMin[y] && x <= rowMax[y], top = 0;
+    for (; top < h && rowW[top] === 0; ) top++;
+    let bottom = h - 1;
+    for (; bottom > top && rowW[bottom] === 0; ) bottom--;
+    if (bottom - top < 14) return { ok: !1, reason: "the face is too small in the frame \u2014 crop closer" };
+    let smoothW = smooth(rowW, Math.max(1, Math.round((bottom - top) * 0.015))), hairline = top, faceH0 = bottom - top, widest = top, faceW = 6;
+    for (let pass = 0; pass < 3; pass++) {
+      let limit = Math.min(bottom, Math.round(top + (pass === 0 ? (bottom - top) * 0.5 : faceH0)));
+      widest = argmax(smoothW, top, limit + 1), faceW = Math.max(6, smoothW[widest]), faceH0 = faceW * 1.11;
+    }
+    let cx = (rowMin[widest] + rowMax[widest]) / 2, bandBottom = Math.min(bottom, Math.round(hairline + faceH0 * 1.05)), band = new Float64Array(h);
+    for (let y = top; y <= bandBottom; y++) {
+      if (rowW[y] < 3) continue;
+      let sum = 0, n = 0, pad = Math.round(rowW[y] * 0.12);
+      for (let x = rowMin[y] + pad; x <= rowMax[y] - pad; x++)
+        sum += luma(data, (y * w + x) * 4), n++;
+      n > 0 && (band[y] = 255 - sum / n);
+    }
+    let dark = smooth(band, Math.max(1, Math.round(faceH0 * 8e-3))), lipBand = new Float64Array(h);
+    for (let y = top; y <= bandBottom; y++) {
+      if (rowW[y] < 3) continue;
+      let sum = 0, n = 0, pad = Math.round(rowW[y] * 0.12);
+      for (let x = rowMin[y] + pad; x <= rowMax[y] - pad; x++)
+        sum += lipness(data, (y * w + x) * 4), n++;
+      n > 0 && (lipBand[y] = sum / n);
+    }
+    let lippy = smooth(lipBand, Math.max(1, Math.round(faceH0 * 8e-3))), eyeY = (() => {
+      let lo = Math.max(1, Math.round(hairline + faceH0 * 0.08)), hi = Math.min(h - 2, Math.round(hairline + faceH0 * 0.6));
+      if (hi <= lo) return lo;
+      let down = new Float64Array(w);
+      for (let x = 0; x < w; x++) {
+        let sum = 0, n = 0;
+        for (let y = lo; y <= hi; y++)
+          inside(x, y) && (sum += 255 - luma(data, (y * w + x) * 4), n++);
+        down[x] = n > 3 ? sum / n : 0;
+      }
+      let colDown = smooth(down, Math.max(1, Math.round(faceW * 0.02))), xL = argmax(colDown, cx - faceW * 0.44, cx - faceW * 0.06), xR = argmax(colDown, cx + faceW * 0.06, cx + faceW * 0.44), rowAt = (x0) => {
+        let half = Math.max(2, Math.round(faceW * 0.055)), prof = new Float64Array(h);
+        for (let y = lo; y <= hi; y++) {
+          let sum = 0, n = 0;
+          for (let x = Math.round(x0 - half); x <= Math.round(x0 + half); x++)
+            x < 0 || x >= w || (sum += 255 - luma(data, (y * w + x) * 4), n++);
+          prof[y] = n ? sum / n : 0;
+        }
+        return argmax(prof, lo, hi + 1);
+      };
+      return Math.round((rowAt(xL) + rowAt(xR)) / 2);
+    })(), mouthY = (() => {
+      let lo = Math.max(eyeY + 2, Math.round(eyeY + faceW * 0.2)), hi = Math.min(bandBottom, Math.round(eyeY + faceW * 0.9));
+      if (hi <= lo) return Math.min(bandBottom, Math.round(eyeY + faceW * 0.455));
+      let expect = eyeY + faceW * 0.455, sigma = faceW * 0.13, floor = 1 / 0;
+      for (let y = lo; y <= hi; y++) lippy[y] < floor && (floor = lippy[y]);
+      let best = lo, bestV = -1 / 0;
+      for (let y = lo; y <= hi; y++) {
+        let v = (lippy[y] - floor) * Math.exp(-0.5 * ((y - expect) / sigma) ** 2);
+        v > bestV && (bestV = v, best = y);
+      }
+      return best;
+    })(), eyeToMouth = Math.max(5, mouthY - eyeY), headH = eyeToMouth / 0.3, crownY = eyeY - headH * 0.46, chin = (() => {
+      let lo = Math.max(top + 2, Math.round(mouthY + headH * 0.1), Math.round(hairline + faceH0 * 0.85)), hi = Math.min(h - 2, Math.round(mouthY + headH * 0.36), Math.round(hairline + faceH0 * 1.25));
+      if (hi <= lo) return Math.min(h - 1, Math.round(mouthY + headH * 0.24));
+      let best = Math.round(mouthY + headH * 0.24), bestCurv = -1 / 0;
+      for (let y = lo; y <= hi; y++) {
+        if (rowW[y] < faceW * 0.12) {
+          bestCurv <= 0 && (best = Math.max(lo, y - 1));
+          break;
+        }
+        let curv = smoothW[y - 1] - 2 * smoothW[y] + smoothW[y + 1];
+        curv > bestCurv && (bestCurv = curv, best = y);
+      }
+      return best;
+    })(), faceH = Math.max(8, chin - hairline), noseY = argmax(dark, eyeY + eyeToMouth * 0.3, mouthY - eyeToMouth * 0.18), eyeBand = Math.max(2, Math.round(headH * 0.045)), cols = new Float64Array(w);
+    for (let x = 0; x < w; x++) {
+      let sum = 0, n = 0;
+      for (let y = eyeY - eyeBand; y <= eyeY + eyeBand; y++)
+        inside(x, y) && (sum += 255 - luma(data, (y * w + x) * 4), n++);
+      cols[x] = n > 2 ? sum / n : 0;
+    }
+    let colD = smooth(cols, Math.max(1, Math.round(faceW * 0.02))), inset = faceW * 0.06, eyeL = argmax(colD, cx - faceW / 2 + inset, cx - faceW * 0.06), eyeR = argmax(colD, cx + faceW * 0.06, cx + faceW / 2 - inset), interEye = Math.max(faceW * 0.2, eyeR - eyeL), eyeFloor = (colD[eyeL] + colD[eyeR]) / 2 * 0.72, eyeWidth = Math.max(2, (runWidth(colD, eyeL, eyeFloor) + runWidth(colD, eyeR, eyeFloor)) / 2);
+    function eyeShapeAt(x0) {
+      let colBand = new Float64Array(h), wid = Math.max(1, Math.round(eyeWidth * 0.3)), y0 = Math.max(0, eyeY - eyeBand * 3), y1 = Math.min(h - 1, eyeY + eyeBand * 3);
+      for (let y = y0; y <= y1; y++) {
+        let sum = 0, n = 0;
+        for (let x = Math.round(x0 - wid); x <= Math.round(x0 + wid); x++)
+          x < 0 || x >= w || (sum += 255 - luma(data, (y * w + x) * 4), n++);
+        colBand[y] = n ? sum / n : 0;
+      }
+      let peak = argmax(colBand, eyeY - eyeBand * 2, eyeY + eyeBand * 2 + 1);
+      return { h: runWidth(colBand, peak, colBand[peak] * 0.72), y: peak };
+    }
+    let eL = eyeShapeAt(eyeL), eR = eyeShapeAt(eyeR), aperture = clamp4((eL.h + eR.h) / 2 / eyeWidth, 0.06, 1.4), eyeTilt = Math.atan2(eR.y - eL.y, Math.max(1, eyeR - eyeL)), browTop = Math.round(eyeY - headH * 0.115), browBot = Math.round(eyeY - headH * 0.035), browDark = 0, browRows = 0;
+    for (let y = browTop; y <= browBot; y++)
+      y < 0 || y >= h || (browDark += dark[y], browRows++);
+    browDark = browRows ? browDark / browRows : 0;
+    let cheekRef = (() => {
+      let sum = 0, n = 0, y0 = Math.round(eyeY + eyeToMouth * 0.25), y1 = Math.round(eyeY + eyeToMouth * 0.6);
+      for (let y = y0; y <= y1; y++)
+        if (!(y < 0 || y >= h || rowW[y] < 4))
+          for (let side of [-1, 1])
+            for (let k = 0; k < 4; k++) {
+              let x = Math.round(cx + side * faceW * (0.24 + k * 0.045));
+              inside(x, y) && (sum += 255 - luma(data, (y * w + x) * 4), n++);
+            }
+      return n > 8 ? sum / n : 128;
+    })(), browStrength = clamp4((browDark - cheekRef) / 40, 0, 2), mouthBand = Math.max(2, Math.round(headH * 0.035)), mcols = new Float64Array(w);
+    for (let x = 0; x < w; x++) {
+      let sum = 0, n = 0;
+      for (let y = mouthY - mouthBand; y <= mouthY + mouthBand; y++)
+        inside(x, y) && (sum += lipness(data, (y * w + x) * 4), n++);
+      mcols[x] = n > 2 ? sum / n : 0;
+    }
+    let mD = smooth(mcols, Math.max(1, Math.round(faceW * 0.015))), mouthCentre = (() => {
+      let a = Math.max(0, Math.round(cx - faceW * 0.3)), b = Math.min(w - 1, Math.round(cx + faceW * 0.3)), floor = 1 / 0;
+      for (let x = a; x <= b; x++) mD[x] < floor && (floor = mD[x]);
+      let num = 0, den = 0;
+      for (let x = a; x <= b; x++) {
+        let wgt = Math.max(0, mD[x] - floor) ** 2;
+        num += wgt * x, den += wgt;
+      }
+      return den > 0 ? Math.round(num / den) : Math.round(cx);
+    })(), lipFloor = (() => {
+      let m = 1 / 0;
+      for (let x = Math.round(cx - faceW * 0.45); x <= Math.round(cx + faceW * 0.45); x++)
+        x >= 0 && x < w && mD[x] < m && (m = mD[x]);
+      return Number.isFinite(m) ? m : 0;
+    })(), mouthWidth = Math.max(3, runWidth(mD, mouthCentre, lipFloor + (mD[mouthCentre] - lipFloor) * 0.45)), mouthCurve = (() => {
+      let x0 = Math.round(mouthCentre - mouthWidth * 0.4), x1 = Math.round(mouthCentre + mouthWidth * 0.4);
+      if (x1 - x0 < 6) return 0;
+      let lo = Math.max(0, Math.round(Math.max(noseY + (mouthY - noseY) * 0.4, mouthY - mouthBand * 2))), hi = Math.min(h - 1, mouthY + mouthBand * 2), centre = (x) => {
+        let colFloor = 1 / 0;
+        for (let y = lo; y <= hi; y++) {
+          let v = lipness(data, (y * w + x) * 4);
+          v < colFloor && (colFloor = v);
+        }
+        let num = 0, den = 0, peak = 0;
+        for (let y = lo; y <= hi; y++) {
+          let d = Math.max(0, lipness(data, (y * w + x) * 4) - colFloor - 0.08);
+          d > peak && (peak = d), num += d * y, den += d;
+        }
+        return peak > 0.1 && den > 0 ? num / den : null;
+      }, found = [];
+      for (let x = Math.max(0, x0); x <= Math.min(w - 1, x1); x++) {
+        let y = centre(x);
+        y !== null && found.push(y);
+      }
+      let n = found.length;
+      if (n < 8) return 0;
+      let edge = Math.max(1, Math.round(n * 0.2)), mean = (list) => list.reduce((p, q) => p + q, 0) / list.length, corners = (mean(found.slice(0, edge)) + mean(found.slice(n - edge))) / 2, mid = mean(found.slice(Math.round(n * 0.38), Math.round(n * 0.62) + 1));
+      return clamp4((mid - corners) / (headH * 0.035), -1.6, 1.6);
+    })(), teeth = (() => {
+      let bright = 0, n = 0;
+      for (let y = mouthY - mouthBand; y <= mouthY + mouthBand; y++)
+        if (!(y < 0 || y >= h))
+          for (let x = Math.round(mouthCentre - mouthWidth * 0.3); x <= Math.round(mouthCentre + mouthWidth * 0.3); x++)
+            x < 0 || x >= w || (luma(data, (y * w + x) * 4) > 168 && bright++, n++);
+      return n > 10 ? bright / n : 0;
+    })(), noseWidth = (() => {
+      let ncols = new Float64Array(w), nb = Math.max(1, Math.round(headH * 0.02));
+      for (let x = 0; x < w; x++) {
+        let sum = 0, n = 0;
+        for (let y = noseY - nb; y <= noseY + nb; y++)
+          inside(x, y) && (sum += 255 - luma(data, (y * w + x) * 4), n++);
+        ncols[x] = n > 1 ? sum / n : 0;
+      }
+      let nD = smooth(ncols, Math.max(1, Math.round(faceW * 0.012))), at = argmax(nD, cx - faceW * 0.2, cx + faceW * 0.2);
+      return runWidth(nD, at, nD[at] * 0.7);
+    })(), glasses = (() => {
+      let bridgeX = Math.round((eyeL + eyeR) / 2), bridge = 0, n = 0;
+      for (let y = eyeY - eyeBand; y <= eyeY + eyeBand; y++)
+        for (let x = bridgeX - 2; x <= bridgeX + 2; x++)
+          y < 0 || y >= h || x < 0 || x >= w || (bridge += 255 - luma(data, (y * w + x) * 4), n++);
+      bridge = n ? bridge / n : 0;
+      let lit = 0, cells = 0;
+      for (let x = Math.round(cx - faceW * 0.45); x <= Math.round(cx + faceW * 0.45); x++) {
+        if (x < 0 || x >= w) continue;
+        let peak = 0;
+        for (let y = eyeY - eyeBand * 2; y <= eyeY + eyeBand * 2; y++)
+          inside(x, y) && (peak = Math.max(peak, 255 - luma(data, (y * w + x) * 4)));
+        peak > cheekRef + 26 && lit++, cells++;
+      }
+      let span = cells ? lit / cells : 0, amount = clamp4((span - 0.46) / 0.32 + (bridge - cheekRef) / 60 * 0.5, 0, 2), socketDark = (colD[eyeL] + colD[eyeR]) / 2;
+      return { amount, dark: socketDark > cheekRef + 62 && aperture > 0.34 && amount > 0.5 };
+    })(), beard = (() => {
+      function patch(y0, y1, xa, xb) {
+        let sum = 0, sq = 0, n = 0;
+        for (let y = Math.round(y0); y <= Math.round(y1); y++)
+          if (!(y < 1 || y >= h - 1))
+            for (let x = Math.round(xa); x <= Math.round(xb); x++)
+              x < 1 || x >= w - 1 || !inside(x, y) || (sum += 255 - luma(data, (y * w + x) * 4), sq += Math.abs(luma(data, (y * w + x + 1) * 4) - luma(data, (y * w + x - 1) * 4)), n++);
+        return n > 12 ? { dark: sum / n, rough: sq / n } : null;
+      }
+      let chinP = patch(mouthY + eyeToMouth * 0.16, chin - headH * 0.01, cx - faceW * 0.2, cx + faceW * 0.2), cheekP = patch(eyeY + eyeToMouth * 0.2, eyeY + eyeToMouth * 0.55, cx - faceW * 0.34, cx - faceW * 0.16), lipP = patch(noseY + headH * 0.012, mouthY - mouthBand, cx - faceW * 0.16, cx + faceW * 0.16), jawP = patch(mouthY - eyeToMouth * 0.1, mouthY + eyeToMouth * 0.3, cx - faceW * 0.46, cx - faceW * 0.3);
+      if (!chinP || !cheekP) return { amount: 0, moustache: 0, jawline: 0 };
+      let score2 = (p) => clamp4((p.dark - cheekP.dark) / 42 * 0.7 + (p.rough - cheekP.rough) / 16 * 0.6, 0, 2);
+      return {
+        amount: score2(chinP),
+        moustache: lipP ? score2(lipP) : 0,
+        jawline: jawP ? score2(jawP) : 0
+      };
+    })(), hair = (() => {
+      let s = Math.max(2, Math.round(Math.min(w, h) * 0.05)), patchAt = (x0, y0) => {
+        let r2 = 0, g2 = 0, b2 = 0, n2 = 0;
+        for (let y = y0; y < y0 + s; y++)
+          for (let x = x0; x < x0 + s; x++) {
+            if (x < 0 || y < 0 || x >= w || y >= h) continue;
+            let i = (y * w + x) * 4;
+            r2 += data[i], g2 += data[i + 1], b2 += data[i + 2], n2++;
+          }
+        return n2 ? [r2 / n2, g2 / n2, b2 / n2] : null;
+      }, corners = [patchAt(0, 0), patchAt(w - s, 0), patchAt(0, h - s), patchAt(w - s, h - s)].filter(Boolean), bg = [0, 1, 2].map((k) => corners.reduce((a, c) => a + c[k], 0) / Math.max(1, corners.length)), busy = corners.reduce(
+        (m, c) => Math.max(m, Math.abs(c[0] - bg[0]) + Math.abs(c[1] - bg[1]) + Math.abs(c[2] - bg[2])),
+        0
+      ) > 110;
+      busy && notes.push("busy background \u2014 hair volume is a guess");
+      let isBg = (x, y) => {
+        let i = (y * w + x) * 4;
+        return Math.abs(data[i] - bg[0]) + Math.abs(data[i + 1] - bg[1]) + Math.abs(data[i + 2] - bg[2]) < 78;
+      }, crown = hairline, r = 0, g = 0, b = 0, n = 0, rough = 0, limit = Math.max(0, Math.round(hairline - headH * 0.62));
+      for (let y = hairline - 1; y >= limit; y--) {
+        let solid = 0, tried = 0;
+        for (let k = -3; k <= 3; k++) {
+          let x = Math.round(cx + k * faceW * 0.11);
+          if (!(x < 0 || x >= w) && (tried++, !isBg(x, y))) {
+            solid++;
+            let i = (y * w + x) * 4;
+            r += data[i], g += data[i + 1], b += data[i + 2], x > 0 && x < w - 1 && (rough += Math.abs(luma(data, (y * w + x + 1) * 4) - luma(data, (y * w + x - 1) * 4))), n++;
+          }
+        }
+        if (tried === 0 || solid / tried < 0.55) break;
+        crown = y;
+      }
+      let volume = clamp4((hairline - crown) / (headH * 0.3), 0, 2.5), side = 0;
+      for (let dir of [-1, 1]) {
+        let reach = 0;
+        for (let y = eyeY; y <= Math.min(h - 1, chin + headH * 0.5); y++) {
+          let x = Math.round(cx + dir * faceW * 0.62);
+          if (x < 0 || x >= w || isBg(x, y) || inside(x, y)) break;
+          reach = y - eyeY;
+        }
+        side = Math.max(side, reach / headH);
+      }
+      let rgb = n > 20 ? [r / n, g / n, b / n] : null;
+      return {
+        volume,
+        side: clamp4(side, 0, 1.2),
+        rough: n > 20 ? rough / n : 12,
+        rgb,
+        luma: rgb ? 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2] : 90,
+        crownY: crown,
+        trusted: !busy && n > 20
+      };
+    })(), skinRgb = (() => {
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let y = Math.round(eyeY + eyeToMouth * 0.2); y <= Math.round(eyeY + eyeToMouth * 0.6); y++)
+        if (!(y < 0 || y >= h))
+          for (let x = Math.round(cx - faceW * 0.36); x <= Math.round(cx + faceW * 0.36); x++) {
+            if (x < 0 || x >= w || !face[y * w + x]) continue;
+            let i = (y * w + x) * 4;
+            r += data[i], g += data[i + 1], b += data[i + 2], n++;
+          }
+      return n > 20 ? [r / n, g / n, b / n] : [200, 165, 140];
+    })(), eyeMid = (eyeL + eyeR) / 2, silRow = Math.max(0, Math.min(h - 1, eyeY)), silCentre = rowMin[silRow] < 0 ? cx : (rowMin[silRow] + rowMax[silRow]) / 2, drift = (eyeMid - silCentre) / (faceW / 2), yaw = clamp4(Math.atan(drift * 0.9), -0.34, 0.34), symmetry = 1 - Math.min(1, Math.abs(Math.abs(eyeL - cx) - Math.abs(eyeR - cx)) / (faceW * 0.25)), eyeSep = clamp4((interEye / faceW - 0.24) / 0.24, 0, 1), bandSep = clamp4((dark[eyeY] - cheekRef) / 45, 0, 1), proportion = 1 - Math.min(1, Math.abs(headH / (faceH / 0.73) - 1)), confidence = clamp4(0.25 * symmetry + 0.25 * eyeSep + 0.3 * bandSep + 0.2 * proportion, 0, 1);
+    return confidence < 0.45 && notes.push("low confidence \u2014 a plain, front-on, well-lit photo works best"), {
+      ok: !0,
+      confidence,
+      notes,
+      image: { w, h },
+      head: { crownY, chinY: chin, hairlineY: hairline, cx, faceW, headH },
+      ratios: {
+        // cheek width against the head's own height — the master ratio
+        aspect: faceW / headH,
+        // width at the jaw and at the brow, both against the cheek width
+        jaw: smoothW[Math.min(h - 1, Math.round(chin - faceH * 0.16))] / faceW,
+        brow: smoothW[Math.max(0, Math.round(hairline + faceH * 0.08))] / faceW,
+        // how much of its bounding box the silhouette fills: 0.79 is an ellipse,
+        // more is a boxy skull, less is a pointed one
+        fill: blob.length / (faceW * faceH)
+      },
+      eyes: {
+        x: [eyeL, eyeR],
+        y: eyeY,
+        spacing: interEye / faceW,
+        width: eyeWidth / faceW,
+        aperture,
+        tilt: eyeTilt
+      },
+      brows: { y: (browTop + browBot) / 2, strength: browStrength },
+      nose: { y: noseY, width: noseWidth / faceW, t: (noseY - crownY) / headH },
+      mouth: {
+        y: mouthY,
+        width: mouthWidth / faceW,
+        curve: mouthCurve,
+        teeth,
+        t: (mouthY - crownY) / headH
+      },
+      hair,
+      beard,
+      glasses,
+      skin: { rgb: skinRgb },
+      yaw,
+      tilt: clamp4(eyeTilt, -0.26, 0.26),
+      // eye line as a fraction of the head, for the fit to compare with 0.46
+      eyeT: (eyeY - crownY) / headH
+    };
+  }
+
+  // src/faces/fit.js
+  var PHOTO = {
+    aspect: 0.66,
+    // cheek width / (crown → chin)
+    jaw: 0.72,
+    // jaw width / cheek width
+    brow: 0.88,
+    // forehead width / cheek width
+    fill: 0.78,
+    // silhouette area / its bounding box
+    eyeSpacing: 0.44,
+    // pupil-to-pupil / cheek width
+    eyeWidth: 0.2,
+    // one eye / cheek width
+    aperture: 0.34,
+    // eye height / eye width
+    noseWidth: 0.25,
+    mouthWidth: 0.36,
+    chinT: 1
+    // measured chin against the eye/mouth ruler's prediction
+  }, DOODLE = {
+    aspect: 34 / 35,
+    // head.w / head.h, both half-extents, so the ratio holds
+    area: 1190,
+    jaw: 1,
+    brow: 1,
+    exp: 2.05,
+    eyeSpacing: 0.44,
+    // eyes sit at ±w·spacing, so this *is* a width fraction
+    eyeSize: 1.05,
+    noseSize: 1.05,
+    mouthW: 1.05
+  };
+  function clamp5(v, lo, hi) {
+    return v < lo ? lo : v > hi ? hi : v;
+  }
+  function temper(factor, trust) {
+    return 1 + (factor - 1) * trust;
+  }
+  var EYE_APERTURE = {
+    line: 0.05,
+    closed: 0.06,
+    slit: 0.12,
+    sleepy: 0.2,
+    squint: 0.16,
+    angry: 0.22,
+    glare: 0.3,
+    dot: 0.5,
+    beady: 0.42,
+    oval: 0.38,
+    wonky: 0.38,
+    mismatched: 0.36,
+    sideways: 0.34,
+    hollow: 0.55,
+    teary: 0.45,
+    round: 0.7,
+    wide: 0.85,
+    googly: 0.95,
+    cross: 0.5,
+    star: 0.6,
+    spiral: 0.6,
+    wink: 0.3
+  }, HAIR_VOLUME = {
+    none: 0,
+    buzz: 0.12,
+    shortHatch: 0.3,
+    receding: 0.22,
+    combover: 0.35,
+    flatTop: 0.5,
+    bowl: 0.6,
+    fringe: 0.55,
+    waves: 0.6,
+    messy: 0.75,
+    mop: 0.85,
+    bob: 0.6,
+    curly: 1,
+    spiky: 0.9,
+    pompadour: 1,
+    afro: 1.6,
+    long: 0.7,
+    dreads: 0.8,
+    ponytail: 0.6,
+    bun: 0.7,
+    topknot: 0.8,
+    pigtails: 0.6,
+    mohawk: 1.2,
+    shavedSides: 0.7,
+    braids: 0.6,
+    cornrows: 0.35,
+    sidePuffs: 0.8
+  }, HAIR_SIDE = {
+    none: 0,
+    buzz: 0,
+    shortHatch: 0.02,
+    receding: 0,
+    combover: 0.02,
+    flatTop: 0.02,
+    bowl: 0.12,
+    fringe: 0.1,
+    waves: 0.2,
+    messy: 0.12,
+    mop: 0.2,
+    bob: 0.45,
+    curly: 0.25,
+    spiky: 0.05,
+    pompadour: 0.05,
+    afro: 0.3,
+    long: 0.8,
+    dreads: 0.7,
+    ponytail: 0.2,
+    bun: 0.05,
+    topknot: 0.05,
+    pigtails: 0.5,
+    mohawk: 0,
+    shavedSides: 0.05,
+    braids: 0.7,
+    cornrows: 0.05,
+    sidePuffs: 0.4
+  }, MOUTH_CURVE = {
+    smile: 1,
+    grin: 1,
+    teeth: 0.6,
+    smirk: 0.4,
+    open: 0.2,
+    o: 0,
+    dot: 0,
+    line: 0,
+    wavy: 0,
+    pursed: -0.1,
+    stitched: 0,
+    zigzag: 0,
+    gap: 0.3,
+    buck: 0.3,
+    tongue: 0.5,
+    fangs: 0.3,
+    drool: 0,
+    frown: -1
+  }, NOT_FOR_A_LIKENESS = {
+    eyes: ["cross", "star", "spiral", "googly", "teary", "wink", "closed", "hollow", "sideways"],
+    mouth: ["tongue", "drool", "fangs", "stitched", "zigzag", "buck", "gap"],
+    nose: ["snout", "broken"],
+    brows: ["zigzag"]
+  };
+  function sober(key, list) {
+    let blocked = NOT_FOR_A_LIKENESS[key];
+    if (!blocked) return list;
+    let kept = list.filter((v) => !blocked.includes(v));
+    return kept.length ? kept : list;
+  }
+  function favour(domain, keys, strength = 26) {
+    let out = {};
+    for (let k of domain) out[k] = 1;
+    for (let k of keys) k in out && (out[k] = strength);
+    return out;
+  }
+  function nearestHead(target) {
+    let best = "round", bestD = 1 / 0;
+    for (let [name, m] of Object.entries(HEAD_METRICS)) {
+      let d = 3.2 * (m.w / m.h - target.aspect) ** 2 + 1.6 * (m.jaw - target.jaw) ** 2 + 1.1 * (m.brow - target.brow) ** 2 + 0.35 * ((m.exp || 2.05) / 2.05 - target.exp / 2.05) ** 2;
+      d < bestD && (bestD = d, best = name);
+    }
+    return best;
+  }
+  function readMeasurement(m) {
+    let notes = [], trust = clamp5(0.45 + m.confidence * 0.55, 0.4, 1), chinT = clamp5((m.head.chinY - m.head.crownY) / m.head.headH, 0.72, 1.3), headH = m.head.headH * chinT, aspectF = temper(m.head.faceW / headH / PHOTO.aspect, trust), jawF = temper(m.ratios.jaw / PHOTO.jaw, trust), browF = temper(m.ratios.brow / PHOTO.brow, trust), fillF = temper(m.ratios.fill / PHOTO.fill, trust * 0.7), targets = {
+      // Hold the drawn head's area and move only its proportion, so a wide face
+      // does not also arrive as a giant one.
+      aspect: clamp5(DOODLE.aspect * aspectF, 0.62, 1.18),
+      jaw: clamp5(DOODLE.jaw * jawF, 0.55, 1.45),
+      brow: clamp5(DOODLE.brow * browF, 0.68, 1.34),
+      exp: clamp5(DOODLE.exp * fillF ** 2.2, 1.62, 3.4),
+      // Feature lines, as fractions of the head from the crown. The generator
+      // wants offsets from its own 0.46 / 0.60 / 0.76, applied in half-heights.
+      eyeT: clamp5(0.46 / chinT, 0.38, 0.54),
+      noseT: clamp5(m.nose.t / chinT, 0.5, 0.7),
+      mouthT: clamp5(0.76 / chinT, 0.66, 0.86),
+      eyeSpacing: clamp5(DOODLE.eyeSpacing * temper(m.eyes.spacing / PHOTO.eyeSpacing, trust), 0.3, 0.6),
+      eyeSize: clamp5(DOODLE.eyeSize * temper(m.eyes.width / PHOTO.eyeWidth, trust * 0.85), 0.62, 1.55),
+      noseSize: clamp5(DOODLE.noseSize * temper(m.nose.width / PHOTO.noseWidth, trust * 0.8), 0.62, 1.5),
+      mouthW: clamp5(DOODLE.mouthW * temper(m.mouth.width / PHOTO.mouthWidth, trust * 0.85), 0.68, 1.45),
+      yaw: m.yaw,
+      tilt: m.tilt,
+      // The measured curvature is the whole expression signal, and it is a
+      // stronger one than any single drawn feature, so it is not tempered.
+      expression: clamp5(m.mouth.curve * 0.7, -1, 1),
+      aperture: m.eyes.aperture,
+      hairVolume: m.hair.volume,
+      hairSide: m.hair.side,
+      mouthCurve: m.mouth.curve
+    };
+    targets.head = nearestHead(targets);
+    let ap = m.eyes.aperture, eyeSet = ap < 0.14 ? ["line", "closed", "slit", "sleepy"] : ap < 0.24 ? ["sleepy", "squint", "slit", "line", "angry"] : ap < 0.4 ? ["oval", "beady", "wonky", "mismatched", "glare", "sideways"] : ap < 0.62 ? ["oval", "round", "dot", "teary", "wonky"] : ["round", "wide", "googly", "hollow"], bs = m.brows.strength, browSet = bs < 0.26 ? ["none", "sparse", "thin"] : bs < 0.6 ? ["thin", "stubby", "sparse", "arched"] : bs < 1.02 ? ["thick", "angled", "arched", "worried"] : ["bushy", "thick", "angled"], c = m.mouth.curve, mouthSet = m.mouth.teeth > 0.2 ? ["teeth", "grin", "open", "smile"] : c > 0.55 ? ["smile", "grin", "smirk"] : c > 0.18 ? ["smile", "smirk", "line", "wavy"] : c < -0.45 ? ["frown", "pursed", "line"] : ["line", "wavy", "pursed", "smirk", "dot"], nw = m.nose.width / PHOTO.noseWidth, noseSet = nw > 1.25 ? ["wide", "bulb", "flat", "snub"] : nw < 0.8 ? ["tiny", "button", "twoLines", "long"] : ["twoLines", "hook", "roman", "triangle", "button", "long"], hat = null, volume = m.hair.volume;
+    m.hair.trusted && volume > 0.92 && m.hair.rough < 9 && (hat = m.hair.luma > 150 ? "cap" : "beanie", volume = clamp5(volume - 0.8, 0, 1), notes.push("smooth, tall crown \u2014 read as headwear rather than hair"));
+    let side = m.hair.side, hairSet;
+    m.hair.trusted ? side > 0.5 ? hairSet = ["long", "dreads", "braids", "bob", "waves", "ponytail"] : volume < 0.22 ? hairSet = ["none", "buzz", "receding", "shortHatch"] : volume < 0.55 ? hairSet = ["shortHatch", "buzz", "combover", "flatTop", "receding", "cornrows"] : volume < 1.05 ? hairSet = side > 0.28 ? ["bob", "mop", "waves", "fringe", "curly"] : ["messy", "shortHatch", "waves", "bowl", "fringe", "spiky"] : hairSet = ["afro", "curly", "mop", "messy", "pompadour", "spiky"] : (hairSet = ["shortHatch", "messy", "mop", "waves", "buzz", "fringe"], notes.push("hair could not be measured \u2014 picked something ordinary"));
+    let tone = m.hair.luma < 72 ? "dark" : m.hair.luma < 142 ? "mid" : "light", b = m.beard, beardSet = null;
+    b.amount > 1.05 ? beardSet = b.jawline > 0.55 ? ["full", "longBeard", "muttonChops"] : ["goatee", "vandyke", "chinStrap"] : b.amount > 0.58 ? beardSet = b.jawline > 0.5 ? ["full", "chinStrap", "stubble"] : ["goatee", "vandyke", "soulPatch", "stubble"] : b.moustache > 0.75 && b.amount > 0.22 ? beardSet = ["mustache", "handlebar", "fuManchu"] : b.amount > 0.3 ? beardSet = ["stubble", "soulPatch", "none"] : beardSet = ["none"];
+    let glassesSet = null;
+    m.glasses.amount > 0.78 ? glassesSet = m.glasses.dark ? ["sunglasses", "aviator"] : ["round", "square", "halfRim", "cateye"] : m.glasses.amount > 0.52 && (glassesSet = ["none", "round", "square", "halfRim"]);
+    let sets = {
+      head: [targets.head],
+      eyes: sober("eyes", eyeSet),
+      brows: sober("brows", browSet),
+      nose: sober("nose", noseSet),
+      mouth: sober("mouth", mouthSet),
+      hair: hairSet,
+      beard: beardSet,
+      glasses: glassesSet || ["none"]
+    }, weights = {
+      head: favour(HEAD_SHAPES, sets.head, 200),
+      eyes: favour(EYE_STYLES, sets.eyes, 60),
+      brows: favour(BROW_STYLES, sets.brows, 60),
+      nose: favour(NOSE_STYLES, sets.nose, 40),
+      mouth: favour(MOUTH_STYLES, sets.mouth, 60),
+      hair: favour(HAIR_STYLES, sets.hair, 90),
+      beard: favour(BEARD_STYLES, sets.beard, 200),
+      hat: favour(HAT_STYLES, [hat || "none"], hat ? 60 : 400),
+      glasses: favour(GLASSES_STYLES, sets.glasses, glassesSet ? 120 : 400)
+    }, force = { hat: hat || "none" };
+    return glassesSet || (force.glasses = "none"), beardSet.length === 1 && beardSet[0] === "none" && (force.beard = "none"), { weights, force, sets, targets, notes: notes.concat(m.notes || []), tone, hat };
+  }
+  function applyTargets(g, t, m) {
+    let kin = resolveKin(g.kin), area = DOODLE.area;
+    return g.head.w = clamp5(Math.sqrt(area * t.aspect) * kin.metrics.w, 23, 42), g.head.h = clamp5(Math.sqrt(area / t.aspect) * kin.metrics.h, 26, 47), g.head.jaw = clamp5(t.jaw * kin.metrics.jaw, 0.5, 1.5), g.head.brow = clamp5(t.brow * kin.metrics.brow, 0.6, 1.4), g.head.exp = clamp5(t.exp * kin.metrics.exp, 1.55, 3.5), g.head.yaw = t.yaw, g.head.tilt = t.tilt, g.head.lopsided = 0, g.eyes.y = clamp5(2 * (t.eyeT - 0.46), -0.1, 0.1) + kin.lines.eye, g.nose.y = clamp5(2 * (t.noseT - 0.6), -0.1, 0.1) + kin.lines.nose, g.mouth.y = clamp5(2 * (t.mouthT - 0.76), -0.1, 0.1) + kin.lines.mouth, g.eyes.spacing = clamp5(t.eyeSpacing * kin.scale.eyeGap, 0.28, 0.62), g.eyes.size = clamp5(t.eyeSize * kin.scale.eye, 0.55, 1.7), g.nose.size = clamp5(t.noseSize * kin.scale.nose, 0.55, 1.7), g.mouth.w = clamp5(t.mouthW * kin.scale.mouth, 0.6, 1.6), g.mouth.x = 0, g.nose.x = 0, g.eyes.asym *= 0.45, g.eyes.tiltAsym *= 0.45, g.eyes.heightAsym *= 0.45, g.hair.asym *= 0.6, g.expression = t.expression, m && (g.hair.tone = m.hair.luma < 72 ? "dark" : m.hair.luma < 142 ? "mid" : "light", g.beard.tone = g.hair.tone, g.marks.freckles = 0, g.marks.warts = 0), g;
+  }
+  function score(g, t, sets) {
+    let s = 0;
+    for (let [key, style] of [
+      ["eyes", g.eyes.style],
+      ["brows", g.brows.style],
+      ["nose", g.nose.style],
+      ["mouth", g.mouth.style],
+      ["hair", g.hair.style],
+      ["beard", g.beard.style],
+      ["glasses", g.glasses.style],
+      ["head", g.head.shape]
+    ])
+      key === "hair" && g.hat.style !== "none" || sets && sets[key] && !sets[key].includes(style) && (s += 3);
+    let ap = EYE_APERTURE[g.eyes.style];
+    ap !== void 0 && (s += 2.4 * (ap - t.aperture) ** 2);
+    let vol = HAIR_VOLUME[g.hair.style];
+    vol !== void 0 && (s += 4 * (vol - clamp5(t.hairVolume, 0, 1.8)) ** 2);
+    let side = HAIR_SIDE[g.hair.style];
+    side !== void 0 && (s += 4 * (side - t.hairSide) ** 2);
+    let mc = MOUTH_CURVE[g.mouth.style];
+    mc !== void 0 && (s += 0.9 * (mc - clamp5(t.mouthCurve, -1, 1)) ** 2);
+    let hm = HEAD_METRICS[g.head.shape];
+    return hm && (s += 1.2 * (hm.w / hm.h - t.aspect) ** 2), s;
+  }
+  function nearestHue(rgb) {
+    let best = "terracotta", bestD = 1 / 0;
+    for (let [name, css] of Object.entries(ACCENT_COLORS)) {
+      let m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(css);
+      if (!m) continue;
+      let d = (+m[1] - rgb[0]) ** 2 + (+m[2] - rgb[1]) ** 2 + (+m[3] - rgb[2]) ** 2;
+      d < bestD && (bestD = d, best = name);
+    }
+    return best;
+  }
+  function fitGenome(m, opts2 = {}) {
+    let read = readMeasurement(m), seed = opts2.seed || "photo", tries = Math.max(1, opts2.tries ?? 240), genomeOpts2 = {
+      ...opts2,
+      // The fit's tables sit *under* the caller's, so a pinned kin or a hand-set
+      // hairstyle still wins — the photo informs the choice, it does not seize it.
+      weights: { ...read.weights, ...opts2.weights || {} },
+      force: { kin: "human", ...read.force, ...opts2.force || {} },
+      mood: read.targets.expression
+    }, best = null, bestScore = 1 / 0;
+    for (let i = 0; i < tries; i++) {
+      let g = makeGenome(`${seed}#${i}`, genomeOpts2), s = score(g, read.targets, read.sets);
+      s < bestScore && (bestScore = s, best = g);
+    }
+    if (applyTargets(best, read.targets, m), (opts2.color ?? 1) > 0) {
+      let rng = makeRng(`${seed}:accent`), onHair = best.hair.style !== "none" && best.hair.tone !== "dark" && m.hair.rgb, rgb = onHair ? m.hair.rgb : m.skin.rgb, hue = nearestHue(rgb);
+      best.accents = [{
+        target: onHair ? "hair" : "skin",
+        hue,
+        color: ACCENT_COLORS[hue],
+        offset: [rng.gauss(0, 2.6), rng.gauss(0, 2.6)],
+        scale: rng.range(0.92, 1.12),
+        rotate: rng.gauss(0, 0.05),
+        alpha: rng.range(0.5, 0.72),
+        wobble: rng.range(0.9, 1.7),
+        x: 0,
+        y: 0,
+        size: 1
+      }];
+    } else
+      best.accents = [];
+    return best.seed = `${seed}#fit`, { genome: best, read, tried: tries, score: bestScore };
+  }
+
   // app.js
-  var $ = (id) => document.getElementById(id), labelOf = (table, key) => table[key] && table[key].label || key, clamp4 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  var $ = (id) => document.getElementById(id), labelOf = (table, key) => table[key] && table[key].label || key, clamp6 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
   function pretty(v) {
     return v.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
   }
@@ -4921,6 +5702,107 @@ ${labelOf(KIN, g.kin)} \xB7 ${labelOf(LOOKS, g.look)} \xB7 ${labelOf(PEN_STYLES,
   $("focusB").addEventListener("click", () => {
     cmp.b && (focused = JSON.parse(JSON.stringify(cmp.b)), setMode("focus"));
   });
+  var PHOTO_MAX = 320, measured = null, photoSmall = null, photoTake = 0;
+  function photoFail(msg) {
+    $("photoError").textContent = msg, $("photoError").hidden = !1, $("photoResult").hidden = !0;
+  }
+  async function loadPhoto(file) {
+    if ($("photoError").hidden = !0, !file || !file.type.startsWith("image/")) return photoFail("That is not an image file.");
+    let bitmap;
+    try {
+      bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    } catch {
+      try {
+        bitmap = await createImageBitmap(file);
+      } catch {
+        return photoFail("That image could not be read.");
+      }
+    }
+    let scale = Math.min(1, PHOTO_MAX / Math.max(bitmap.width, bitmap.height)), cw = Math.max(1, Math.round(bitmap.width * scale)), ch = Math.max(1, Math.round(bitmap.height * scale)), small = document.createElement("canvas");
+    small.width = cw, small.height = ch;
+    let sctx = small.getContext("2d", { willReadFrequently: !0 });
+    sctx.drawImage(bitmap, 0, 0, cw, ch), bitmap.close?.();
+    let m;
+    try {
+      m = measureFace(sctx.getImageData(0, 0, cw, ch));
+    } catch (err) {
+      return photoFail(`The measurement failed: ${err.message}`);
+    }
+    if (!m.ok) return photoFail(m.reason);
+    measured = m, photoSmall = small, photoTake = 0, $("photoResult").hidden = !1;
+    let panel = $("drop").closest("details");
+    panel && (panel.open = !0), drawPhotoOverlay(), describeMeasurement(m);
+  }
+  function drawPhotoOverlay() {
+    if (!photoSmall || !measured) return;
+    let m = measured, view = document.createElement("canvas"), scale = Math.min(1, 240 / photoSmall.width);
+    view.width = Math.round(photoSmall.width * scale), view.height = Math.round(photoSmall.height * scale);
+    let c = view.getContext("2d");
+    c.drawImage(photoSmall, 0, 0, view.width, view.height);
+    let S = (v) => v * scale;
+    c.lineWidth = 1, c.strokeStyle = "rgba(176,94,72,.9)", c.setLineDash([3, 3]), c.strokeRect(
+      S(m.head.cx - m.head.faceW / 2),
+      S(m.head.crownY),
+      S(m.head.faceW),
+      S(m.head.chinY - m.head.crownY)
+    ), c.setLineDash([]), c.strokeStyle = "rgba(52,124,113,.95)";
+    for (let y of [m.eyes.y, m.mouth.y])
+      c.beginPath(), c.moveTo(S(m.head.cx - m.head.faceW * 0.5), S(y)), c.lineTo(S(m.head.cx + m.head.faceW * 0.5), S(y)), c.stroke();
+    c.fillStyle = "rgba(52,124,113,.95)";
+    for (let x of m.eyes.x)
+      c.beginPath(), c.arc(S(x), S(m.eyes.y), Math.max(1.5, S(m.head.faceW * 0.02)), 0, Math.PI * 2), c.fill();
+    $("photoPreview").replaceChildren(view);
+  }
+  function describeMeasurement(m) {
+    let bits = [
+      `confidence ${Math.round(m.confidence * 100)}%`,
+      // 0.66 is what an ordinary portrait measures; the number alone means
+      // nothing to anyone, so say which side of ordinary it falls on.
+      m.ratios.aspect > 0.72 ? "broad head" : m.ratios.aspect < 0.6 ? "narrow head" : "ordinary head",
+      `eyes ${m.eyes.spacing > 0.47 ? "wide-set" : m.eyes.spacing < 0.41 ? "close-set" : "evenly set"}`,
+      m.eyes.aperture < 0.2 ? "narrow" : m.eyes.aperture > 0.5 ? "wide open" : "half open",
+      m.brows.strength > 1 ? "heavy brows" : m.brows.strength < 0.3 ? "faint brows" : "ordinary brows",
+      m.beard.amount > 0.58 ? "beard" : m.beard.amount > 0.3 ? "stubble" : "clean-shaven",
+      m.glasses.amount > 0.78 ? m.glasses.dark ? "dark glasses" : "glasses" : "no glasses",
+      m.mouth.curve > 0.3 ? "smiling" : m.mouth.curve < -0.3 ? "unimpressed" : "level mouth"
+    ];
+    $("photoRead").textContent = bits.join(" \xB7 ") + (m.notes.length ? ` \u2014 ${m.notes.join("; ")}` : "");
+  }
+  function matchPhoto() {
+    if (!measured) return;
+    let o = readOpts(), { genome } = fitGenome(measured, {
+      ...genomeOpts(o),
+      seed: `${o.seed}:photo${photoTake ? `:${photoTake}` : ""}`
+    });
+    focused = genome, setMode("focus"), drawPortrait(), syncPropFields(), syncGenomeText();
+  }
+  function forgetPhoto() {
+    measured = null, photoSmall = null, photoTake = 0, $("photoPreview").replaceChildren(), $("photoRead").textContent = "", $("photoResult").hidden = !0, $("photoError").hidden = !0, $("photoFile").value = "";
+  }
+  $("photoPick").addEventListener("click", () => $("photoFile").click());
+  $("photoFile").addEventListener("change", (e) => {
+    let file = e.target.files && e.target.files[0];
+    file && loadPhoto(file);
+  });
+  $("photoMatch").addEventListener("click", matchPhoto);
+  $("photoAgain").addEventListener("click", () => {
+    photoTake++, matchPhoto();
+  });
+  $("photoForget").addEventListener("click", forgetPhoto);
+  {
+    let zone = $("drop"), over = (on) => (e) => {
+      e.preventDefault(), zone.classList.toggle("is-over", on);
+    };
+    zone.addEventListener("dragover", over(!0)), zone.addEventListener("dragenter", over(!0)), zone.addEventListener("dragleave", over(!1)), zone.addEventListener("drop", (e) => {
+      e.preventDefault(), zone.classList.remove("is-over");
+      let file = e.dataTransfer?.files?.[0];
+      file && loadPhoto(file);
+    });
+    for (let type of ["dragover", "drop"])
+      document.addEventListener(type, (e) => {
+        zone.contains(e.target) || e.preventDefault();
+      });
+  }
   function copy(text) {
     try {
       navigator.clipboard?.writeText(text)?.catch(() => {
@@ -4969,7 +5851,7 @@ ${labelOf(KIN, g.kin)} \xB7 ${labelOf(LOOKS, g.look)} \xB7 ${labelOf(PEN_STYLES,
     }), el.addEventListener("pointermove", (e) => {
       if (!dragging || !focused) return;
       let w = el.clientWidth || 400;
-      focused.head.yaw = clamp4(startYaw + (e.clientX - startX) / w * 1.1, -0.5, 0.5), focused.head.tilt = clamp4(startTilt + (e.clientY - startY) / w * 0.7, -0.26, 0.26), drawPortrait({ coarse: !0 }), syncPropFields();
+      focused.head.yaw = clamp6(startYaw + (e.clientX - startX) / w * 1.1, -0.5, 0.5), focused.head.tilt = clamp6(startTilt + (e.clientY - startY) / w * 0.7, -0.26, 0.26), drawPortrait({ coarse: !0 }), syncPropFields();
     });
     let end = () => {
       dragging && (dragging = !1, drawPortrait(), syncGenomeText());

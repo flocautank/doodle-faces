@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Doodle Faces — procedural hand-drawn portraits</title>
 <meta name="description" content="Procedural generator of hand-drawn ink faces. Deterministic, dependency-free, reusable in a game.">
-<link rel="stylesheet" href="style.css?v=1dfb3dc096">
+<link rel="stylesheet" href="style.css?v=93072f035d">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='25' font-size='26'>🙂</text></svg>">
 </head>
 <body>
@@ -43,6 +43,38 @@
           override it.
         </p>
       </section>
+
+      <details class="grp">
+        <summary>From a photo</summary>
+        <p class="note">
+          Drop in a portrait and the generator measures it — skull proportions,
+          where the eyes sit and how far apart, brow weight, mouth width and
+          curve, hair volume, beard, glasses — then draws the nearest face it
+          can. It stays a doodle: it is a likeness, not a portrait.
+        </p>
+        <p class="note keep">
+          <b>The photo never leaves this tab.</b> There is nothing to upload it
+          to — this is a static site, and the measuring runs in your browser.
+          Nothing is written to disk, nothing is kept between visits, and
+          <b>Forget</b> or a reload drops it. The share link carries the
+          resulting numbers, never the picture.
+        </p>
+        <div id="drop" class="drop-zone">
+          <input id="photoFile" type="file" accept="image/*" hidden>
+          <button id="photoPick" class="ghost wide" type="button">Choose a photo…</button>
+          <p class="hint">or drop one here</p>
+        </div>
+        <div id="photoResult" hidden>
+          <div id="photoPreview" class="photo-preview"></div>
+          <p id="photoRead" class="note"></p>
+          <div class="btn-col">
+            <button id="photoMatch" class="primary" type="button">Draw this face</button>
+            <button id="photoAgain" class="ghost" type="button">↻ Another take</button>
+            <button id="photoForget" class="ghost" type="button">✕ Forget the photo</button>
+          </div>
+        </div>
+        <p id="photoError" class="err" hidden></p>
+      </details>
 
       <details class="grp" open>
         <summary>Traits</summary>
@@ -229,6 +261,6 @@
 
 </div>
 
-<script type="module" src="app.js?v=1900a7afe2"></script>
+<script type="module" src="app.js?v=6410cab0d5"></script>
 </body>
 </html>

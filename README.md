@@ -119,6 +119,107 @@ reste en français — dis-le si tu la veux en anglais aussi.
 - **Compare** — deux portraits côte à côte, chacun avec son propre pas dans la
   planche, plus *Swap* et *Breed A × B* qui envoie l'enfant en mode focus.
 
+### À partir d'une photo
+
+Panneau **From a photo** : on dépose un portrait, le générateur le mesure et
+dessine le visage le plus proche qu'il sache faire. C'est une ressemblance, pas
+un portrait — le trait reste un doodle.
+
+**La photo ne sort pas de l'onglet.** Ce n'est pas une politique, c'est une
+propriété du code : le site est statique, il n'y a aucun serveur vers qui
+l'envoyer, et la mesure tourne en JavaScript dans la page. Rien n'est écrit sur
+disque, rien n'est conservé d'une visite à l'autre, et **Forget** ou un simple
+rechargement libère tout. Le lien de partage transporte les *nombres* obtenus,
+jamais l'image. Aucune dépendance, aucune requête réseau — pas même le
+téléchargement d'un modèle.
+
+J'ai écarté un maillage de repères (MediaPipe, ~4 Mo depuis un CDN, 478 points).
+Dans un doodle de quinze traits, la ressemblance tient à une poignée de rapports
+grossiers, et la précision sous-pixel serait jetée au moment de quantifier en
+« crâne carré ou en poire ». Le traitement d'image ordinaire suffit, et il rend
+la promesse de confidentialité vérifiable plutôt que déclarative.
+
+#### Ce qui est mesuré
+
+`src/faces/photo.js` travaille sur un tampon RGBA de 320 px — ni canvas, ni DOM,
+donc testable hors navigateur. Un masque de peau en chrominance Cb/Cr (une boîte
+étroite et remarquablement indépendante de la carnation) donne la silhouette ;
+son profil de largeur ligne par ligne est *le même objet* que la courbe de
+largeur de la supellipse du générateur.
+
+L'échelle du crâne vient de la distance **yeux → bouche**, jamais du blob : le
+sommet du crâne est sous les cheveux et la ligne des cheveux ne tombe pas au même
+endroit chez tout le monde. Le menton est ensuite le coin où la mâchoire cesse de
+se resserrer, borné par deux prédictions indépendantes.
+
+Quelques leçons payées comptant :
+
+- Le filtre qui écarte les cheveux du masque écarte aussi **les yeux, les
+  sourcils et la barbe** — il ne faut donc pas chercher les traits sombres *à
+  travers* ce masque, mais dans l'étendue des lignes.
+- Une barbe foncée traverse toute la largeur du menton et **déconnecte le cou du
+  visage** : le blob s'arrêtait à la barbe, et la barbe devenait invisible en
+  étant grande. D'où la fusion des régions de peau que seule une bande sombre
+  sépare.
+- Une monture de lunettes est sombre sur *toute* la largeur du verre, donc sa
+  ligne est plus sombre que celle des yeux, quelle que soit sa teinte. Choisir la
+  rangée la plus sombre plaçait la ligne des yeux sur la monture basse et
+  comprimait toutes les proportions d'un cinquième. On cherche donc d'abord les
+  **colonnes** des yeux, puis la rangée la plus sombre à ces colonnes.
+- La bouche a son propre canal : les lèvres sont beaucoup plus **rouges
+  relativement à leur luminance** que la peau ou que les poils. Sans ça une barbe
+  fournie l'emportait sur les lèvres, et comme l'échelle du crâne dérive de la
+  distance yeux-bouche, cette seule erreur élargissait la tête de 15 %.
+
+#### Comment la mesure devient un visage
+
+`src/faces/fit.js` décide, avec deux règles.
+
+**L'écart, pas l'absolu.** Une tête dessinée ici est presque aussi large que
+haute ; un vrai crâne fait deux tiers. Donner le rapport brut aplatirait tout le
+monde. Chaque mesure est donc divisée par ce que donne un portrait ordinaire,
+puis le facteur obtenu est appliqué à la valeur ordinaire *du générateur*.
+
+**Les nombres sont assignés, les noms sont cherchés.** Largeur, mâchoire, écart
+des yeux, largeur de bouche : il y a une mesure derrière chacun, on les pose. En
+revanche rien dans une photo ne dit « en poire » : ces traits reçoivent une table
+de poids, puis quelques centaines de génomes candidats sont notés contre la
+mesure et le plus proche gagne. C'est ce partage qui fait que le résultat
+ressemble à la personne *et* reste dessiné : la recherche ne touche pas aux
+asymétries faites main.
+
+Deux garde-fous appris à l'usage. Les traits **absents** sont épinglés absents —
+laisser un chapeau à « improbable » en pose un sur un portrait sur trente, et un
+chapeau qui couvre le crâne efface en plus la chevelure qui, elle, avait été
+mesurée. Et les styles « gag » (larme, spirale, langue pendante) sont exclus de
+l'ajustement : charmants sur un inconnu de la planche, malvenus sur le visage de
+quelqu'un qui a confié sa photo. Ils restent accessibles en les épinglant.
+
+Le bouton **Another take** rejoue l'ajustement avec une autre graine : la même
+personne, un autre dessin — barbe pleine ou barbe longue, lunettes rondes ou
+carrées — et non quelqu'un d'autre.
+
+#### Est-ce que ça marche ?
+
+On ne teste pas « ça me ressemble », mais on peut tester la chaîne qui le
+prétend : `tools/synth-face.mjs` fabrique un portrait dont les proportions sont
+connues par construction, et `npm test` vérifie qu'elles ressortent.
+
+```bash
+npm test
+```
+
+Quarante-trois vérifications : géométrie retrouvée, proportions qui bougent dans
+le bon sens, expression lue juste, barbe et lunettes détectées, plus les
+régressions ci-dessus explicitement verrouillées. Un visage synthétique est
+beaucoup plus facile qu'un vrai : réussir ici est un plancher, pas un plafond.
+
+L'aveu utile est ailleurs, dans l'interface : la mesure est **dessinée sur la
+photo**. Un pourcentage de confiance que personne ne peut vérifier vaut bien
+moins que des lignes dont on voit qu'elles manquent les yeux. Une photo de face,
+nette, sur fond uni, bien éclairée donne le meilleur résultat ; de profil, dans
+la pénombre ou devant un fond chargé, la confiance chute et le dit.
+
 ### L'expression
 
 Un seul curseur, de −1 (aigre) à +1 (ravi). Ce n'est **pas un trait** : c'est
@@ -174,8 +275,12 @@ src/faces/
   presets.js      les populations : carnet, humains, foule, enfants, joueurs, taverne, carnaval
   recipes.js      les portraits épinglés : un personnage précis, pas une population
   breed.js        croisement de deux génomes : des frères et sœurs, une famille
+  photo.js        mesurer un visage sur une photo (aucun DOM, aucun réseau)
+  fit.js          transformer cette mesure en génome
 tools/
   build-single.mjs  tout aplatir en un fichier HTML autonome
+  synth-face.mjs    un portrait synthétique aux proportions connues
+  test-photo.mjs    vérifier que la mesure les retrouve
   anatomy.js      le génome → géométrie concrète dans une boîte de 100 unités
   ink.js          les primitives "stylo à main levée" + la texture papier
   color.js        la couche couleur : lavis mats, hors repérage

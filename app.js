@@ -21,6 +21,8 @@ import { PRESETS, PRESET_NAMES } from './src/faces/presets.js';
 import { atlasSeeds, buildAtlas } from './src/faces/atlas.js';
 import { makeRng } from './src/faces/rng.js';
 import { breed } from './src/faces/breed.js';
+import { measureFace } from './src/faces/photo.js';
+import { fitGenome } from './src/faces/fit.js';
 
 const $ = (id) => document.getElementById(id);
 const labelOf = (table, key) => (table[key] && table[key].label) || key;
@@ -705,6 +707,199 @@ $('focusB').addEventListener('click', () => {
   focused = JSON.parse(JSON.stringify(cmp.b));
   setMode('focus');
 });
+
+// ---------------------------------------------------------------------------
+// From a photo
+//
+// The measuring is local because there is nowhere for it to be anything else:
+// this is a static site with no server behind it. So the privacy claim in the
+// sidebar is a property of the code rather than a policy — there is no request
+// to make. What is held is a 320px working copy for the overlay and an object
+// of numbers; both are dropped by Forget.
+// ---------------------------------------------------------------------------
+
+/** Proportions is all the fit needs; detail beyond this is only slower. */
+const PHOTO_MAX = 320;
+
+let measured = null;   // the measurement: numbers, no pixels
+let photoSmall = null; // the downscaled working copy, for the overlay
+let photoTake = 0;
+
+function photoFail(msg) {
+  $('photoError').textContent = msg;
+  $('photoError').hidden = false;
+  $('photoResult').hidden = true;
+}
+
+/** Decode, downscale, measure. The full-size image is never kept. */
+async function loadPhoto(file) {
+  $('photoError').hidden = true;
+  if (!file || !file.type.startsWith('image/')) return photoFail('That is not an image file.');
+
+  let bitmap;
+  try {
+    // `from-image` honours EXIF rotation, which phone photos rely on — a
+    // sideways portrait measures as a very wide face indeed.
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch {
+    try {
+      bitmap = await createImageBitmap(file);
+    } catch {
+      return photoFail('That image could not be read.');
+    }
+  }
+
+  const scale = Math.min(1, PHOTO_MAX / Math.max(bitmap.width, bitmap.height));
+  const cw = Math.max(1, Math.round(bitmap.width * scale));
+  const ch = Math.max(1, Math.round(bitmap.height * scale));
+  const small = document.createElement('canvas');
+  small.width = cw;
+  small.height = ch;
+  const sctx = small.getContext('2d', { willReadFrequently: true });
+  sctx.drawImage(bitmap, 0, 0, cw, ch);
+  bitmap.close?.();
+
+  let m;
+  try {
+    m = measureFace(sctx.getImageData(0, 0, cw, ch));
+  } catch (err) {
+    return photoFail(`The measurement failed: ${err.message}`);
+  }
+  if (!m.ok) return photoFail(m.reason);
+
+  measured = m;
+  photoSmall = small;
+  photoTake = 0;
+  $('photoResult').hidden = false;
+  // If the panel was collapsed the overlay would be measured and then hidden,
+  // which is the one thing the user most needs to see.
+  const panel = $('drop').closest('details');
+  if (panel) panel.open = true;
+  drawPhotoOverlay();
+  describeMeasurement(m);
+}
+
+/**
+ * Show what was measured, on top of the photo.
+ *
+ * The most useful thing this feature can do when it goes wrong is to let you
+ * see *that* it went wrong. A confidence number nobody can check is worth much
+ * less than lines you can watch miss the eyes.
+ */
+function drawPhotoOverlay() {
+  if (!photoSmall || !measured) return;
+  const m = measured;
+  const view = document.createElement('canvas');
+  const scale = Math.min(1, 240 / photoSmall.width);
+  view.width = Math.round(photoSmall.width * scale);
+  view.height = Math.round(photoSmall.height * scale);
+  const c = view.getContext('2d');
+  c.drawImage(photoSmall, 0, 0, view.width, view.height);
+
+  const S = (v) => v * scale;
+  c.lineWidth = 1;
+  c.strokeStyle = 'rgba(176,94,72,.9)';
+  c.setLineDash([3, 3]);
+  c.strokeRect(
+    S(m.head.cx - m.head.faceW / 2), S(m.head.crownY),
+    S(m.head.faceW), S(m.head.chinY - m.head.crownY),
+  );
+  c.setLineDash([]);
+  c.strokeStyle = 'rgba(52,124,113,.95)';
+  for (const y of [m.eyes.y, m.mouth.y]) {
+    c.beginPath();
+    c.moveTo(S(m.head.cx - m.head.faceW * 0.5), S(y));
+    c.lineTo(S(m.head.cx + m.head.faceW * 0.5), S(y));
+    c.stroke();
+  }
+  c.fillStyle = 'rgba(52,124,113,.95)';
+  for (const x of m.eyes.x) {
+    c.beginPath();
+    c.arc(S(x), S(m.eyes.y), Math.max(1.5, S(m.head.faceW * 0.02)), 0, Math.PI * 2);
+    c.fill();
+  }
+  $('photoPreview').replaceChildren(view);
+}
+
+/** Say in words what the measurement came to, so it can be argued with. */
+function describeMeasurement(m) {
+  const pct = Math.round(m.confidence * 100);
+  const bits = [
+    `confidence ${pct}%`,
+    // 0.66 is what an ordinary portrait measures; the number alone means
+    // nothing to anyone, so say which side of ordinary it falls on.
+    m.ratios.aspect > 0.72 ? 'broad head' : m.ratios.aspect < 0.6 ? 'narrow head' : 'ordinary head',
+    `eyes ${m.eyes.spacing > 0.47 ? 'wide-set' : m.eyes.spacing < 0.41 ? 'close-set' : 'evenly set'}`,
+    m.eyes.aperture < 0.2 ? 'narrow' : m.eyes.aperture > 0.5 ? 'wide open' : 'half open',
+    m.brows.strength > 1 ? 'heavy brows' : m.brows.strength < 0.3 ? 'faint brows' : 'ordinary brows',
+    m.beard.amount > 0.58 ? 'beard' : m.beard.amount > 0.3 ? 'stubble' : 'clean-shaven',
+    m.glasses.amount > 0.78 ? (m.glasses.dark ? 'dark glasses' : 'glasses') : 'no glasses',
+    m.mouth.curve > 0.3 ? 'smiling' : m.mouth.curve < -0.3 ? 'unimpressed' : 'level mouth',
+  ];
+  $('photoRead').textContent = bits.join(' · ') + (m.notes.length ? ` — ${m.notes.join('; ')}` : '');
+}
+
+/** Fit the measurement and put the result in focus. */
+function matchPhoto() {
+  if (!measured) return;
+  const o = readOpts();
+  const { genome } = fitGenome(measured, {
+    ...genomeOpts(o),
+    seed: `${o.seed}:photo${photoTake ? `:${photoTake}` : ''}`,
+  });
+  focused = genome;
+  setMode('focus');
+  drawPortrait();
+  syncPropFields();
+  syncGenomeText();
+}
+
+function forgetPhoto() {
+  measured = null;
+  photoSmall = null;
+  photoTake = 0;
+  $('photoPreview').replaceChildren();
+  $('photoRead').textContent = '';
+  $('photoResult').hidden = true;
+  $('photoError').hidden = true;
+  $('photoFile').value = '';
+}
+
+$('photoPick').addEventListener('click', () => $('photoFile').click());
+$('photoFile').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (file) loadPhoto(file);
+});
+$('photoMatch').addEventListener('click', matchPhoto);
+$('photoAgain').addEventListener('click', () => {
+  photoTake++;
+  matchPhoto();
+});
+$('photoForget').addEventListener('click', forgetPhoto);
+
+{
+  const zone = $('drop');
+  const over = (on) => (e) => {
+    e.preventDefault();
+    zone.classList.toggle('is-over', on);
+  };
+  zone.addEventListener('dragover', over(true));
+  zone.addEventListener('dragenter', over(true));
+  zone.addEventListener('dragleave', over(false));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('is-over');
+    const file = e.dataTransfer?.files?.[0];
+    if (file) loadPhoto(file);
+  });
+  // Dropping anywhere else must not have the browser navigate away from the
+  // page to display the image, which loses whatever the user had set up.
+  for (const type of ['dragover', 'drop']) {
+    document.addEventListener(type, (e) => {
+      if (!zone.contains(e.target)) e.preventDefault();
+    });
+  }
+}
 
 /** Clipboard writes are refused when the page is not focused, or sandboxed. */
 function copy(text) {
