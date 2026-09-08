@@ -175,6 +175,10 @@ Quelques leçons payées comptant :
   rangée la plus sombre plaçait la ligne des yeux sur la monture basse et
   comprimait toutes les proportions d'un cinquième. On cherche donc d'abord les
   **colonnes** des yeux, puis la rangée la plus sombre à ces colonnes.
+- La référence « peau nue » — un point du milieu de la joue dont *tout* dépend
+  (barbe, sourcils, lunettes, dents) — attrapait la monture basse des lunettes
+  et devenait 60 % trop sombre. Résultat : la peau éclairée comptait comme des
+  dents, et tout porteur de lunettes revenait la bouche ouverte, souriant.
 - La bouche a son propre canal : les lèvres sont beaucoup plus **rouges
   relativement à leur luminance** que la peau ou que les poils. Sans ça une barbe
   fournie l'emportait sur les lèvres, et comme l'échelle du crâne dérive de la
@@ -218,7 +222,7 @@ connues par construction, et `npm test` vérifie qu'elles ressortent.
 npm test
 ```
 
-Cinquante vérifications : géométrie retrouvée, proportions qui bougent dans
+Cinquante-cinq vérifications : géométrie retrouvée, proportions qui bougent dans
 le bon sens, expression lue juste, barbe et lunettes détectées, plus les
 régressions ci-dessus explicitement verrouillées. Un visage synthétique est
 beaucoup plus facile qu'un vrai : réussir ici est un plancher, pas un plafond.

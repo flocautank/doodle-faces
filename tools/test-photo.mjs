@@ -123,6 +123,28 @@ console.log('\nthings that are either there or not');
   check('a bare chin stays bare',
     fitGenome(bare, { tries: 60 }).genome.beard.style === 'none');
 
+  // Regression: the "bare skin" reference sampled a band that still caught the
+  // lower rim of a pair of glasses, which made it 60% darker than the cheek it
+  // described. That one number is the baseline for the beard, brow, glasses and
+  // teeth tests alike, so a bespectacled sitter had lit skin counted as bright
+  // enough to be teeth and came back grinning with their mouth open.
+  for (const [name, o] of [['bare', {}], ['bespectacled', { glasses: true }], ['bearded', { beard: 0.9 }]]) {
+    check(`a closed mouth shows no teeth (${name})`,
+      measure({ ...o, mouthCurve: -0.9 }).m.mouth.teeth < 0.15);
+  }
+
+  // Regression: flooring the lip run against the least-red column put the
+  // threshold below bare skin, so the run walked out to the cheeks and every
+  // fitted face was given the widest mouth on the menu.
+  const narrowMouth = measure({ mouthW: 26 }).m;
+  const wideMouth = measure({ mouthW: 56 }).m;
+  check('mouth width is measured, not saturated',
+    narrowMouth.mouth.width < wideMouth.mouth.width * 0.75,
+    `${narrowMouth.mouth.width.toFixed(2)} vs ${wideMouth.mouth.width.toFixed(2)}`);
+  check('and a beard does not widen it',
+    Math.abs(measure({ mouthW: 40, beard: 0.9, glasses: true }).m.mouth.width
+      / measure({ mouthW: 40 }).m.mouth.width - 1) < 0.12);
+
   const specs = measure({ glasses: true }).m;
   check('rims are detected', specs.glasses.amount > bare.glasses.amount + 0.2,
     `${specs.glasses.amount.toFixed(2)} vs ${bare.glasses.amount.toFixed(2)}`);

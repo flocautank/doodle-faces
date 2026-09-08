@@ -4877,7 +4877,7 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
       y < 0 || y >= h || (browDark += dark[y], browRows++);
     browDark = browRows ? browDark / browRows : 0;
     let cheekRef = (() => {
-      let sum = 0, n = 0, y0 = Math.round(eyeY + eyeToMouth * 0.25), y1 = Math.round(eyeY + eyeToMouth * 0.6);
+      let sum = 0, n = 0, y0 = Math.round(eyeY + eyeToMouth * 0.42), y1 = Math.round(eyeY + eyeToMouth * 0.8);
       for (let y = y0; y <= y1; y++)
         if (!(y < 0 || y >= h || rowW[y] < 4))
           for (let side of [-1, 1])
@@ -4903,11 +4903,10 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
       }
       return den > 0 ? Math.round(num / den) : Math.round(cx);
     })(), lipFloor = (() => {
-      let m = 1 / 0;
-      for (let x = Math.round(cx - faceW * 0.45); x <= Math.round(cx + faceW * 0.45); x++)
-        x >= 0 && x < w && mD[x] < m && (m = mD[x]);
-      return Number.isFinite(m) ? m : 0;
-    })(), mouthWidth = Math.max(3, runWidth(mD, mouthCentre, lipFloor + (mD[mouthCentre] - lipFloor) * 0.45)), mouthCurve = (() => {
+      let a = Math.max(0, Math.round(cx - faceW * 0.45)), b = Math.min(w - 1, Math.round(cx + faceW * 0.45)), vals = [];
+      for (let x = a; x <= b; x++) vals.push(mD[x]);
+      return vals.length ? (vals.sort((p, q) => p - q), vals[vals.length >> 1]) : 0;
+    })(), mouthWidth = Math.max(3, runWidth(mD, mouthCentre, lipFloor + (mD[mouthCentre] - lipFloor) * 0.5)), mouthCurve = (() => {
       let x0 = Math.round(mouthCentre - mouthWidth * 0.4), x1 = Math.round(mouthCentre + mouthWidth * 0.4);
       if (x1 - x0 < 6) return 0;
       let lo = Math.max(0, Math.round(Math.max(noseY + (mouthY - noseY) * 0.4, mouthY - mouthBand * 2))), hi = Math.min(h - 1, mouthY + mouthBand * 2), centre = (x) => {
@@ -4932,11 +4931,11 @@ button.star.is-on { background: var(--accent); border-color: var(--accent); colo
       let edge = Math.max(1, Math.round(n * 0.2)), mean = (list) => list.reduce((p, q) => p + q, 0) / list.length, corners = (mean(found.slice(0, edge)) + mean(found.slice(n - edge))) / 2, mid = mean(found.slice(Math.round(n * 0.38), Math.round(n * 0.62) + 1));
       return clamp4((mid - corners) / (headH * 0.035), -1.6, 1.6);
     })(), teeth = (() => {
-      let bright = 0, n = 0;
-      for (let y = mouthY - mouthBand; y <= mouthY + mouthBand; y++)
+      let cheekLuma = 255 - cheekRef, half = Math.max(1, Math.round(mouthBand * 0.5)), bright = 0, n = 0;
+      for (let y = mouthY - half; y <= mouthY + half; y++)
         if (!(y < 0 || y >= h))
           for (let x = Math.round(mouthCentre - mouthWidth * 0.3); x <= Math.round(mouthCentre + mouthWidth * 0.3); x++)
-            x < 0 || x >= w || (luma(data, (y * w + x) * 4) > 168 && bright++, n++);
+            inside(x, y) && (luma(data, (y * w + x) * 4) > cheekLuma + 14 && bright++, n++);
       return n > 10 ? bright / n : 0;
     })(), noseWidth = (() => {
       let ncols = new Float64Array(w), nb = Math.max(1, Math.round(headH * 0.02));

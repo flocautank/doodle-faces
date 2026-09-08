@@ -721,12 +721,21 @@ export function measureFace(img) {
   }
   browDark = browRows ? browDark / browRows : 0;
 
-  /** Mid-cheek: bare skin on almost everyone, so it sets what "not dark" is. */
+  /**
+   * Mid-cheek: bare skin on almost everyone, so it sets what "not dark" is.
+   *
+   * The band has to start well below the eye line. At a quarter of the way down
+   * to the mouth it still caught the lower rim of a pair of glasses, which made
+   * the reference 60% darker than the cheek it was supposed to describe — and
+   * this one number is the baseline for the beard, brow, glasses and teeth
+   * tests alike, so a bespectacled sitter had lit skin scored as bright enough
+   * to be teeth and came back grinning.
+   */
   const cheekRef = (() => {
     let sum = 0;
     let n = 0;
-    const y0 = Math.round(eyeY + eyeToMouth * 0.25);
-    const y1 = Math.round(eyeY + eyeToMouth * 0.6);
+    const y0 = Math.round(eyeY + eyeToMouth * 0.42);
+    const y1 = Math.round(eyeY + eyeToMouth * 0.8);
     for (let y = y0; y <= y1; y++) {
       if (y < 0 || y >= h || rowW[y] < 4) continue;
       for (const side of [-1, 1]) {
@@ -782,14 +791,25 @@ export function measureFace(img) {
   // a fraction of the peak still counts ambient shading as mouth, which ran the
   // measured width out past the corners and had the curvature reading lip
   // shadow on skin.
+  /**
+   * Where the mouth stops, at half height above the *median* column.
+   *
+   * Flooring against the least-red column instead put the threshold below bare
+   * skin, so the run walked out to the cheeks and the mouth measured more than
+   * twice its width — which, clamped, meant every fitted face got the widest
+   * mouth available. A median is the skin the mouth sits in, which is the thing
+   * the lips have to stand out from.
+   */
   const lipFloor = (() => {
-    let m = Infinity;
-    for (let x = Math.round(cx - faceW * 0.45); x <= Math.round(cx + faceW * 0.45); x++) {
-      if (x >= 0 && x < w && mD[x] < m) m = mD[x];
-    }
-    return Number.isFinite(m) ? m : 0;
+    const a = Math.max(0, Math.round(cx - faceW * 0.45));
+    const b = Math.min(w - 1, Math.round(cx + faceW * 0.45));
+    const vals = [];
+    for (let x = a; x <= b; x++) vals.push(mD[x]);
+    if (!vals.length) return 0;
+    vals.sort((p, q) => p - q);
+    return vals[vals.length >> 1];
   })();
-  const mouthWidth = Math.max(3, runWidth(mD, mouthCentre, lipFloor + (mD[mouthCentre] - lipFloor) * 0.45));
+  const mouthWidth = Math.max(3, runWidth(mD, mouthCentre, lipFloor + (mD[mouthCentre] - lipFloor) * 0.5));
 
   /**
    * Mouth curvature — the whole of the expression measurement.
@@ -856,15 +876,27 @@ export function measureFace(img) {
     return clamp((mid - corners) / (headH * 0.035), -1.6, 1.6);
   })();
 
-  /** Teeth: a bright run inside the dark mouth means it is open and showing. */
+  /**
+   * Teeth: a run brighter than the sitter's own cheek, inside the mouth.
+   *
+   * The first version counted pixels over a fixed brightness across a band as
+   * tall as the mouth is wide — which is mostly the skin above and below the
+   * lips, and lit skin clears any such threshold easily. So a closed, frowning
+   * mouth came back as toothy and the fit drew it hanging open. Teeth are
+   * brighter than facial skin and lips are much darker, so the test that works
+   * is a margin over the cheek, measured only in the thin band the lips
+   * actually occupy.
+   */
   const teeth = (() => {
+    const cheekLuma = 255 - cheekRef;
+    const half = Math.max(1, Math.round(mouthBand * 0.5));
     let bright = 0;
     let n = 0;
-    for (let y = mouthY - mouthBand; y <= mouthY + mouthBand; y++) {
+    for (let y = mouthY - half; y <= mouthY + half; y++) {
       if (y < 0 || y >= h) continue;
       for (let x = Math.round(mouthCentre - mouthWidth * 0.3); x <= Math.round(mouthCentre + mouthWidth * 0.3); x++) {
-        if (x < 0 || x >= w) continue;
-        if (luma(data, (y * w + x) * 4) > 168) bright++;
+        if (!inside(x, y)) continue;
+        if (luma(data, (y * w + x) * 4) > cheekLuma + 14) bright++;
         n++;
       }
     }
