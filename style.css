@@ -428,9 +428,24 @@ button.star { font-size: 1rem; padding: 4px 10px; line-height: 1.2; }
 button.star.is-on { background: var(--accent); border-color: var(--accent); color: #f6f4ec; }
 
 @media (max-width: 860px) {
+  /* On a phone the controls came first and pushed every face below the fold.
+     Put the stage on top, let the page scroll, and stack the panel underneath. */
   body { overflow: auto; }
   .app { grid-template-columns: 1fr; height: auto; }
-  .side { border-right: 0; border-bottom: 1px solid var(--line); }
-  .side-scroll { max-height: 52vh; }
-  .stage { min-height: 70vh; }
+
+  .stage { order: -1; min-height: 78vh; }
+  .sheet { overflow: visible; }
+  .focus, .compare { padding: 12px; }
+  .compare { flex-wrap: wrap; gap: 10px; }
+  .slot-mid { grid-auto-flow: column; gap: 6px; }
+
+  .side {
+    order: 1;
+    border-right: 0;
+    border-top: 1px solid var(--line);
+  }
+  .side-scroll { max-height: none; overflow: visible; }
+  .brand { padding: 12px 16px 10px; }
+  .brand p { display: none; }
+  .nav { width: 30px; height: 52px; }
 }
