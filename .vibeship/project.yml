@@ -1,0 +1,24 @@
+# Managed by Vibeship — https://github.com/flocautank/vibeship (schema vibeship/v1)
+schema: vibeship/v1
+updated: '2026-10-25'
+products:
+- id: doodle-faces
+  name: Doodle Faces
+  repo: flocautank/doodle-faces
+  kind: site
+  platforms:
+  - web
+  stage: paused
+  summary: Procedural pen-and-ink face generator driven by a seed; static site with zero dependencies.
+  monetization:
+    model:
+    - none
+    state: none
+    notes: 'Piste : packs d''atlas sous licence pour moteurs de jeu (Godot), le code restant gratuit.'
+  publishing:
+  - channel: web
+    state: live
+    url: https://flocautank.github.io/doodle-faces/
+  todo:
+  - Tests de non-régression sur des visages de référence
+  last_activity: '2026-09-08'
